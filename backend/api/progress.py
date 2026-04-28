@@ -57,8 +57,8 @@ async def _save_manual_lookup(
             status="unseen",
             context=context_value,
             translation=translation_value,
-            specialization=specialization or "general",
-            difficulty=difficulty or "intermediate",
+            specialization=specialization,
+            difficulty=difficulty,
             next_review_date=datetime.datetime.utcnow(),
         )
         db.add(progress)
