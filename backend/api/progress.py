@@ -15,7 +15,6 @@ from utils.security import get_current_user
 
 router = APIRouter()
 
-
 def _trim_text(value: str | None, max_len: int = 1000) -> str | None:
     if not value:
         return None
@@ -24,34 +23,14 @@ def _trim_text(value: str | None, max_len: int = 1000) -> str | None:
         return None
     return cleaned[:max_len]
 
-
-def _infer_specialization(word: str, context: str) -> str:
-    source = f"{word} {context}".lower()
-    if re.search(r"(algorithm|model|database|system|software|code|neural|api)", source):
-        return "technology"
-    if re.search(r"(market|finance|economic|revenue|portfolio|trade|asset)", source):
-        return "business"
-    if re.search(r"(biology|physics|chemistry|forecast|probability|experiment|clinical)", source):
-        return "science"
-    return "general"
-
-
-def _infer_difficulty(word: str, context: str) -> str:
-    word_len = len(word.strip())
-    context_len = len([token for token in re.split(r"\s+", context.strip()) if token])
-    if word_len <= 6 and context_len <= 14:
-        return "basic"
-    if word_len >= 11 or context_len >= 28:
-        return "advanced"
-    return "intermediate"
-
-
 async def _save_manual_lookup(
     db: AsyncSession,
     current_user: User,
     word: str,
     context: str,
     translation: str | None,
+    specialization: str | None, 
+    difficulty: str | None,     
 ):
     vocab_result = await db.execute(select(Vocabulary).where(Vocabulary.word == word))
     vocab_item = vocab_result.scalar_one_or_none()
@@ -68,8 +47,6 @@ async def _save_manual_lookup(
     )
     progress = progress_result.scalar_one_or_none()
 
-    specialization = _infer_specialization(word, context)
-    difficulty = _infer_difficulty(word, context)
     context_value = _trim_text(context)
     translation_value = _trim_text(translation)
 
@@ -80,8 +57,8 @@ async def _save_manual_lookup(
             status="unseen",
             context=context_value,
             translation=translation_value,
-            specialization=specialization,
-            difficulty=difficulty,
+            specialization=specialization or "general",
+            difficulty=difficulty or "intermediate",
             next_review_date=datetime.datetime.utcnow(),
         )
         db.add(progress)
@@ -90,13 +67,12 @@ async def _save_manual_lookup(
             progress.context = context_value
         if not progress.translation and translation_value:
             progress.translation = translation_value
-        if not progress.specialization:
+        if not progress.specialization and specialization:
             progress.specialization = specialization
-        if not progress.difficulty:
+        if not progress.difficulty and difficulty:
             progress.difficulty = difficulty
 
     await db.commit()
-
 
 @router.post("/update-progress")
 async def update_progress(
@@ -129,6 +105,40 @@ async def update_progress(
         )
         db.add(progress)
 
+    new_specialization = None
+    new_difficulty = None
+
+    # Kéo dữ liệu Context/Translation/Specialization/Difficulty từ cache nháp ra
+    user_context_key = f"user_context:{current_user.user_id}:{data.word}"
+    if redis_client and cache_state.is_available:
+        try:
+            cached_ctx = await redis_client.get(user_context_key)
+            if cached_ctx:
+                ctx_data = json.loads(cached_ctx)
+                if not data.context:
+                    data.context = ctx_data.get("context")
+                if not data.translation:
+                    data.translation = ctx_data.get("translation")
+                    
+                new_specialization = ctx_data.get("specialization")
+                new_difficulty = ctx_data.get("difficulty")
+        except Exception:
+            pass
+
+    # Gán các giá trị
+    if data.context:
+        progress.context = _trim_text(data.context)
+            
+    if data.translation:
+        progress.translation = _trim_text(data.translation)
+
+    if new_specialization and not progress.specialization:
+        progress.specialization = new_specialization
+        
+    if new_difficulty and not progress.difficulty:
+        progress.difficulty = new_difficulty
+
+    # Logic lặp lại ngắt quãng (SRS)
     if data.quality >= 4:
         progress.repetitions += 1
         progress.status = "mastered" if progress.repetitions >= 3 else "learning"
@@ -142,15 +152,20 @@ async def update_progress(
         progress.next_review_date = datetime.datetime.utcnow() + datetime.timedelta(days=1)
         progress.status = "learning"
 
-    if data.context:
-        progress.context = data.context
-    if data.translation:
-        progress.translation = data.translation
+    # Logic tính toán Streak của người dùng
+    today = datetime.datetime.utcnow().date()
+    if current_user.last_study_date != today:
+        if current_user.last_study_date == today - datetime.timedelta(days=1):
+            current_user.current_streak = (current_user.current_streak or 0) + 1
+        else:
+            current_user.current_streak = 1
+            
+        current_user.last_study_date = today
+        db.add(current_user)
 
     await db.commit()
 
     return {"status": "success", "new_status": progress.status}
-
 
 @router.post("/translate-manual")
 async def translate_manual(
@@ -178,6 +193,8 @@ async def translate_manual(
             word=word,
             context=context,
             translation=payload.get("vietnamese_translation"),
+            specialization=payload.get("specialization"), # THÊM MỚI
+            difficulty=payload.get("difficulty")          # THÊM MỚI
         )
         return {**payload, "status": "success"}
 
@@ -196,6 +213,8 @@ async def translate_manual(
             word=word,
             context=context,
             translation=llm_data.get("vietnamese_translation"),
+            specialization=llm_data.get("specialization"), # THÊM MỚI
+            difficulty=llm_data.get("difficulty")          # THÊM MỚI
         )
         return {**llm_data, "status": "success"}
 

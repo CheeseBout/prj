@@ -25,6 +25,9 @@ class User(Base):
     role = Column(String(50), default="user", nullable=False)
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow)
+    current_streak = Column(Integer, default=0)
+    last_study_date = Column(Date, nullable=True)
+    last_active_date = Column(Date, nullable=True)
 
 class Vocabulary(Base):
     __tablename__ = "vocabularies"

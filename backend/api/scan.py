@@ -21,7 +21,6 @@ from utils.security import get_current_user
 
 router = APIRouter()
 
-
 @router.post("/scan")
 async def scan_vocabulary(
     request: ScanPayload,
@@ -62,7 +61,6 @@ async def scan_vocabulary(
     if not all_found_keywords:
         return {"status": "success", "processed_elements": total_elements, "highlights": []}
 
-    # NOTE: scan endpoint only reads user knowledge state, it does not persist vocab anymore.
     query = (
         select(Vocabulary.word, UserVocabProgress.status)
         .join(UserVocabProgress, Vocabulary.id == UserVocabProgress.vocab_id)
@@ -111,6 +109,20 @@ async def scan_vocabulary(
                             "knowledge_state": user_state,
                         }
                     )
+                    
+                    # CẬP NHẬT: Lưu cache context tạm thời cho User (Hit Cache)
+                    if redis_client is not None and cache_state.is_available:
+                        try:
+                            user_context_key = f"user_context:{current_user.user_id}:{word}" # hoặc meta['word']
+                            context_payload = {
+                                "context": text,
+                                "translation": llm_data.get("vietnamese_translation", ""),
+                                "specialization": llm_data.get("specialization", "general"), # THÊM MỚI
+                                "difficulty": llm_data.get("difficulty", "intermediate")     # THÊM MỚI
+                            }
+                            await redis_client.setex(user_context_key, 86400, json.dumps(context_payload))
+                        except Exception:
+                            pass
             else:
                 tasks.append(call_llm_for_explanation(word, text, request.english_level))
                 task_meta.append(
@@ -131,6 +143,14 @@ async def scan_vocabulary(
             if redis_client is not None and cache_state.is_available:
                 try:
                     await redis_client.setex(meta["cache_key"], 604800, json.dumps(llm_data))
+                    
+                    # CẬP NHẬT: Lưu cache context tạm thời cho User (Gọi LLM Mới)
+                    user_context_key = f"user_context:{current_user.user_id}:{meta['word']}"
+                    context_payload = {
+                        "context": meta["element"].text_context,
+                        "translation": llm_data.get("vietnamese_translation", "")
+                    }
+                    await redis_client.setex(user_context_key, 86400, json.dumps(context_payload))
                 except Exception:
                     pass
 
@@ -151,7 +171,6 @@ async def scan_vocabulary(
                 )
 
     return {"status": "success", "processed_elements": total_elements, "highlights": results}
-
 
 @router.post("/scan-inline")
 async def scan_inline(payload: ScanPayload):

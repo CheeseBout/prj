@@ -205,7 +205,8 @@ export const DashboardClient = () => {
         </div>
       </header>
 
-      <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+      {/* ĐÃ ĐIỀU CHỈNH GRID THÀNH 4 CỘT TRÊN MÀN HÌNH LỚN ĐỂ CHỨA THẺ STREAK */}
+      <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <article className="panel rounded-3xl p-5">
           <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Saved words</p>
           <p className="mt-2 text-4xl">{stats?.data.total_words ?? 0}</p>
@@ -217,6 +218,17 @@ export const DashboardClient = () => {
         <article className="panel rounded-3xl p-5">
           <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Mastered</p>
           <p className="mt-2 text-4xl text-[#ff7f50]">{stats?.data.mastered ?? 0}</p>
+        </article>
+        {/* THÊM THẺ HIỂN THỊ STREAK VÀO ĐÂY */}
+        <article className="panel rounded-3xl p-5 border border-orange-100 bg-orange-50/40">
+          <div className="flex items-center justify-between">
+            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-orange-600">Streak</p>
+            <span className="text-xl">🔥</span>
+          </div>
+          <p className="mt-2 text-4xl font-bold text-orange-600">{stats?.data.streak ?? 0}</p>
+          <p className="mt-2 text-xs font-medium text-orange-500">
+            {(stats?.data.streak ?? 0) > 0 ? "Giữ vững phong độ nhé!" : "Học ngay để bắt đầu chuỗi!"}
+          </p>
         </article>
       </section>
 

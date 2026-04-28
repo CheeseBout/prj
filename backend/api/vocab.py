@@ -15,7 +15,7 @@ async def get_vocab_stats(
     db: AsyncSession = Depends(get_db), 
     current_user: User = Depends(get_current_user)
 ):
-    # Get counts by status
+    # Đếm số lượng từ vựng theo trạng thái
     query = select(UserVocabProgress.status, func.count(UserVocabProgress.vocab_id)).where(
         UserVocabProgress.user_id == current_user.user_id
     ).group_by(UserVocabProgress.status)
@@ -28,12 +28,17 @@ async def get_vocab_stats(
         else:
             status_counts[row[0]] = row[1]
             
-    # Calculate total queried words (all rows for this user)
+    # Tổng số từ đã tương tác
     total_words = sum(status_counts.values())
     
-    # Calculate streak (mock implementation for now, you can add a last_active_date to User table)
-    # Since we don't have login history, let's just return a default value or calculate from recent updates
-    streak = 1 
+    # --- LOGIC LẤY STREAK ---
+    today = datetime.datetime.utcnow().date()
+    streak = current_user.current_streak or 0
+    
+    # Nếu lần cuối cùng học là trước ngày hôm qua (ví dụ: cách đây 2 ngày) 
+    # và hôm nay chưa học, chuỗi hiện tại coi như bị đứt (trả về 0)
+    if current_user.last_study_date and current_user.last_study_date < today - datetime.timedelta(days=1):
+        streak = 0
     
     return {
         "status": "success",
@@ -85,12 +90,12 @@ async def get_vocab_list(
     if difficulty and difficulty != "all":
         query = query.where(UserVocabProgress.difficulty == difficulty)
         
-    # Count total
+    # Tính tổng
     count_query = select(func.count()).select_from(query.subquery())
     total_res = await db.execute(count_query)
     total = total_res.scalar() or 0
     
-    # Get paginated data
+    # Phân trang
     query = query.order_by(UserVocabProgress.next_review_date.desc()).offset(offset).limit(limit)
     res = await db.execute(query)
     
@@ -129,8 +134,8 @@ async def get_practice_list(
     ).where(
         UserVocabProgress.user_id == current_user.user_id,
         UserVocabProgress.next_review_date <= now,
-        UserVocabProgress.status != "unseen" # Only review words that are learning or mastered
-    ).order_by(UserVocabProgress.next_review_date.asc()).limit(30) # get max 30 words per session
+        UserVocabProgress.status != "unseen" 
+    ).order_by(UserVocabProgress.next_review_date.asc()).limit(30) 
     
     res = await db.execute(query)
     
