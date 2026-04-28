@@ -9,10 +9,9 @@ from sqlalchemy.future import select
 
 from database import User, UserVocabProgress, Vocabulary, get_db
 from schemas import ScanElement, ScanPayload
-from services.llm_service import call_llm_for_explanation, translate_elements_inline
+from services.llm_service import translate_elements_inline
 from services.nlp_service import (
     extract_keywords_llm,
-    generate_cache_key,
     generate_extract_cache_key,
 )
 from utils.cache import cache_state, redis_client
@@ -27,10 +26,16 @@ async def scan_vocabulary(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+    """
+    Endpoint quét từ vựng: Trích xuất và giải thích thuật ngữ trong 1 lần gọi LLM.
+    """
     results = []
     total_elements = len(request.elements)
 
-    async def get_keywords(text: str, level: str):
+    async def get_keywords_data(text: str, level: str):
+        """
+        Hàm bổ trợ để lấy dữ liệu thuật ngữ (đã kèm giải thích) từ Cache hoặc LLM.
+        """
         cache_key = generate_extract_cache_key(text, level)
         if redis_client is not None and cache_state.is_available:
             try:
@@ -40,142 +45,98 @@ async def scan_vocabulary(
             except Exception:
                 cache_state.is_available = False
 
-        keywords = await extract_keywords_llm(text, level)
+        # Gọi hàm mới trong nlp_service.py trả về list[dict] thay vì list[str]
+        highlights_data = await extract_keywords_llm(text, level)
 
         if redis_client is not None and cache_state.is_available:
             try:
-                await redis_client.setex(cache_key, 604800, json.dumps(keywords))
+                # Cache kết quả trích xuất kèm giải thích trong 7 ngày
+                await redis_client.setex(cache_key, 604800, json.dumps(highlights_data))
             except Exception:
                 pass
-        return keywords
+        return highlights_data
 
+    # Bước 1: Gọi LLM (hoặc Cache) song song cho tất cả các phần tử văn bản
     extract_tasks = [
-        get_keywords(element.text_context, request.english_level) for element in request.elements
+        get_keywords_data(element.text_context, request.english_level) 
+        for element in request.elements
     ]
-    extracted_keywords_per_element = await asyncio.gather(*extract_tasks)
+    all_elements_highlights = await asyncio.gather(*extract_tasks)
 
-    all_found_keywords = set()
-    for keywords in extracted_keywords_per_element:
-        all_found_keywords.update(keywords)
+    # Bước 2: Thu thập tất cả các từ tìm được để kiểm tra trạng thái trong Database
+    all_found_words = set()
+    for highlights in all_elements_highlights:
+        for hl in highlights:
+            all_found_words.add(hl.get("target_word"))
 
-    if not all_found_keywords:
+    if not all_found_words:
         return {"status": "success", "processed_elements": total_elements, "highlights": []}
 
+    # Truy vấn trạng thái học tập của user cho các từ này
     query = (
         select(Vocabulary.word, UserVocabProgress.status)
         .join(UserVocabProgress, Vocabulary.id == UserVocabProgress.vocab_id)
         .where(
             UserVocabProgress.user_id == current_user.user_id,
-            Vocabulary.word.in_(list(all_found_keywords)),
+            Vocabulary.word.in_(list(all_found_words)),
         )
     )
     db_result = await db.execute(query)
     user_knowledge_dict = {row.word: row.status for row in db_result}
 
-    tasks = []
-    task_meta = []
-
+    # Bước 3: Tổng hợp kết quả cuối cùng
     for idx, element in enumerate(request.elements):
         text = element.text_context
-        elem_keywords = extracted_keywords_per_element[idx]
+        element_highlights = all_elements_highlights[idx]
 
-        for word in elem_keywords:
+        for hl_data in element_highlights:
+            word = hl_data.get("target_word")
+            if not word:
+                continue
+
             user_state = user_knowledge_dict.get(word, "unseen")
+            
+            # Bỏ qua nếu user đã thành thạo từ này
             if user_state == "mastered":
                 continue
 
-            cache_key = generate_cache_key(text, word, request.english_level)
-            cached_data = None
-
-            if redis_client is not None and cache_state.is_available:
-                try:
-                    cached_data = await redis_client.get(cache_key)
-                except Exception:
-                    cache_state.is_available = False
-
-            if cached_data:
-                llm_data = json.loads(cached_data)
-                match = re.search(r"\b" + re.escape(word) + r"\b", text, re.IGNORECASE)
-                if match:
-                    results.append(
-                        {
-                            "element_id": element.element_id,
-                            "target_word": word,
-                            "vietnamese_translation": llm_data.get("vietnamese_translation", ""),
-                            "en_explanation": llm_data.get("en_explanation", ""),
-                            "vi_explanation": llm_data.get("vi_explanation", ""),
-                            "startIndex": match.start(),
-                            "endIndex": match.start() + len(word),
-                            "knowledge_state": user_state,
-                        }
-                    )
-
-                    # Update: cache context tam thoi cho user (Hit Cache)
-                    if redis_client is not None and cache_state.is_available:
-                        try:
-                            user_context_key = f"user_context:{current_user.user_id}:{word}"
-                            context_payload = {
-                                "context": text,
-                                "translation": llm_data.get("vietnamese_translation", ""),
-                                "specialization": llm_data.get("specialization"),
-                                "difficulty": llm_data.get("difficulty"),
-                            }
-                            await redis_client.setex(user_context_key, 86400, json.dumps(context_payload))
-                        except Exception:
-                            pass
-            else:
-                tasks.append(call_llm_for_explanation(word, text, request.english_level))
-                task_meta.append(
-                    {
-                        "element": element,
-                        "word": word,
-                        "cache_key": cache_key,
-                        "user_state": user_state,
-                    }
-                )
-
-    if tasks:
-        llm_results = await asyncio.gather(*tasks, return_exceptions=True)
-        for meta, llm_data in zip(task_meta, llm_results):
-            if isinstance(llm_data, Exception) or not llm_data:
-                continue
-
-            if redis_client is not None and cache_state.is_available:
-                try:
-                    await redis_client.setex(meta["cache_key"], 604800, json.dumps(llm_data))
-
-                    # Update: cache context tam thoi cho user (Fresh LLM)
-                    user_context_key = f"user_context:{current_user.user_id}:{meta['word']}"
-                    context_payload = {
-                        "context": meta["element"].text_context,
-                        "translation": llm_data.get("vietnamese_translation", ""),
-                        "specialization": llm_data.get("specialization"),
-                        "difficulty": llm_data.get("difficulty"),
-                    }
-                    await redis_client.setex(user_context_key, 86400, json.dumps(context_payload))
-                except Exception:
-                    pass
-
-            text = meta["element"].text_context
-            match = re.search(r"\b" + re.escape(meta["word"]) + r"\b", text, re.IGNORECASE)
+            # Xác định vị trí từ trong văn bản để frontend highlight
+            match = re.search(r"\b" + re.escape(word) + r"\b", text, re.IGNORECASE)
             if match:
                 results.append(
                     {
-                        "element_id": meta["element"].element_id,
-                        "target_word": meta["word"],
-                        "vietnamese_translation": llm_data.get("vietnamese_translation", ""),
-                        "en_explanation": llm_data.get("en_explanation", ""),
-                        "vi_explanation": llm_data.get("vi_explanation", ""),
+                        "element_id": element.element_id,
+                        "target_word": word,
+                        "vietnamese_translation": hl_data.get("vietnamese_translation", ""),
+                        "en_explanation": hl_data.get("en_explanation", ""),
+                        "vi_explanation": hl_data.get("vi_explanation", ""),
                         "startIndex": match.start(),
-                        "endIndex": match.start() + len(meta["word"]),
-                        "knowledge_state": meta["user_state"],
+                        "endIndex": match.start() + len(word),
+                        "knowledge_state": user_state,
                     }
                 )
+
+                # Cập nhật cache ngữ cảnh tạm thời cho User (để phục vụ việc học sau này)
+                if redis_client is not None and cache_state.is_available:
+                    try:
+                        user_context_key = f"user_context:{current_user.user_id}:{word}"
+                        context_payload = {
+                            "context": text,
+                            "translation": hl_data.get("vietnamese_translation", ""),
+                            "specialization": hl_data.get("specialization"),
+                            "difficulty": hl_data.get("difficulty"),
+                        }
+                        await redis_client.setex(user_context_key, 86400, json.dumps(context_payload))
+                    except Exception:
+                        pass
 
     return {"status": "success", "processed_elements": total_elements, "highlights": results}
 
 @router.post("/scan-inline")
 async def scan_inline(payload: ScanPayload):
+    """
+    Endpoint dịch chèn dòng (Inline Translation).
+    """
     payload_raw = payload.model_dump()
     elements = payload.elements
     if payload.text and not elements:
@@ -187,7 +148,6 @@ async def scan_inline(payload: ScanPayload):
         "request_payload": payload_raw,
         "url": payload.url,
         "elements_count": len(elements),
-        "elements": [element.model_dump() for element in elements],
     }
     await append_json_log(log_entry)
 
@@ -203,5 +163,3 @@ async def scan_inline(payload: ScanPayload):
     ]
 
     return {"status": "success", "highlights": [], "translations": translations}
-
-

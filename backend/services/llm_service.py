@@ -112,7 +112,7 @@ ENGLISH_LEVEL_MAP = {
     "C2": "Thành thạo (C2 / IELTS 8.5 - 9.0) - Trình độ bản xứ, chỉ cần giải thích các khái niệm cực kỳ chuyên sâu và hẹp.",
 }
 
-explain_sem = asyncio.Semaphore(3)
+explain_sem = asyncio.Semaphore(5)
 
 
 async def call_llm_for_explanation(

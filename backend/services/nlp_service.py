@@ -11,21 +11,27 @@ from services.llm_service import (
     llm_client,
 )
 
-extract_sem = asyncio.Semaphore(3)
+# Semaphore giới hạn số lượng tác vụ LLM chạy đồng thời để tránh rate limit
+extract_sem = asyncio.Semaphore(5)
 
-
-async def extract_keywords_llm(text: str, english_level: str) -> list[str]:
+async def extract_keywords_llm(text: str, english_level: str) -> list[dict]:
+    """
+    Trích xuất và giải thích thuật ngữ trong một lần gọi LLM duy nhất.
+    Trả về danh sách các object chứa đầy đủ thông tin giải thích.
+    """
     prompt_config = get_prompts().get("terminology_extraction", {})
     mapped_level = ENGLISH_LEVEL_MAP.get(english_level, english_level)
 
-    system_prompt = prompt_config.get(
+    # System prompt lúc này cần được cấu hình trong system_prompt.json 
+    # để yêu cầu trả về cấu trúc {"highlights": [...]}
+    system_prompt_template = prompt_config.get(
         "system",
-        "Bạn là một chuyên gia ngôn ngữ học. Nhiệm vụ của bạn là trích xuất các thuật ngữ (terminology) trong đoạn văn bản có độ khó cao hơn trình độ {english_level}. Lưu ý: Hãy phân tích nghĩa của từ theo ngữ cảnh (ví dụ: 'interest' trong tài chính khác với 'interest' thông thường). Trình độ của người dùng dựa trên khung CEFR.\nYÊU CẦU ĐẦU RA (Trả về JSON nghiêm ngặt):\n{{\n    \"terms\": [\"term1\", \"term2\"]\n}}",
+        "Bạn là chuyên gia ngôn ngữ học thuật. Nhiệm vụ của bạn là trích xuất và giải thích tối đa 3 thuật ngữ cốt lõi trong văn bản cho trình độ {english_level}."
     )
-    system_prompt = system_prompt.format(english_level=mapped_level)
+    system_prompt = system_prompt_template.format(english_level=mapped_level)
 
-    user_prompt = prompt_config.get("user", "Văn bản cần trích xuất:\n\"{context}\"")
-    user_prompt = user_prompt.format(context=text)
+    user_prompt_template = prompt_config.get("user", "Văn bản cần xử lý:\n\"{context}\"")
+    user_prompt = user_prompt_template.format(context=text)
 
     async with extract_sem:
         for attempt in range(4):
@@ -38,13 +44,16 @@ async def extract_keywords_llm(text: str, english_level: str) -> list[str]:
                         {"role": "user", "content": user_prompt},
                     ],
                     temperature=0.1,
-                    max_tokens=1000,
+                    max_tokens=1500, # Tăng max_tokens vì kết quả bao gồm cả giải thích
                 )
                 content = response.choices[0].message.content
                 data = json.loads(content)
-                return data.get("terms", [])
+                
+                # Trả về key "highlights" (chứa list các dict giải thích)
+                return data.get("highlights", [])
+                
             except Exception as e:
-                print(f"NLP Extraction Error (Attempt {attempt+1}): {e}")
+                print(f"NLP Extraction & Explanation Error (Attempt {attempt+1}): {e}")
                 if "429" in str(e) and attempt < 3:
                     wait_time = 2**attempt
                     match = re.search(r"try again in (\d+(?:\.\d+)?)(ms|s)", str(e))
@@ -58,23 +67,23 @@ async def extract_keywords_llm(text: str, english_level: str) -> list[str]:
                 return []
         return []
 
-
 def sanitize_text(text: str) -> str:
+    """Làm sạch văn bản để tạo cache key đồng nhất."""
     text = text.lower()
     text = re.sub(r"^[^\w]+|[^\w]+$", "", text)
     text = re.sub(r"\s+", " ", text)
     return text.strip()
 
-
 def generate_cache_key(context: str, word: str, english_level: str = "cơ bản") -> str:
+    """Tạo key lưu trữ kết quả giải thích của một từ cụ thể trong ngữ cảnh."""
     clean_context = sanitize_text(context)
     prompt_version = get_prompt_cache_version()
     raw_key = f"{prompt_version}||{clean_context}||{word}||{english_level}"
     return hashlib.md5(raw_key.encode()).hexdigest()
 
-
 def generate_extract_cache_key(context: str, english_level: str = "cơ bản") -> str:
+    """Tạo key lưu trữ kết quả của quá trình quét (scan) toàn bộ đoạn văn bản."""
     clean_context = sanitize_text(context)
     prompt_version = get_prompt_cache_version()
-    raw_key = f"{prompt_version}||EXTRACT||{clean_context}||{english_level}"
+    raw_key = f"{prompt_version}||EXTRACT_FULL||{clean_context}||{english_level}"
     return hashlib.md5(raw_key.encode()).hexdigest()
