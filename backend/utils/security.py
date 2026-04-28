@@ -1,9 +1,11 @@
 import jwt
+import base64
+import hashlib
 from datetime import datetime, timedelta
 
+import bcrypt
 from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import OAuth2PasswordBearer
-from passlib.context import CryptContext
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 
@@ -15,16 +17,40 @@ from config import (
 )
 from database import User, get_db
 
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+BCRYPT_SHA256_PREFIX = "bcrypt_sha256$"
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="api/auth/login", auto_error=False)
 
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
-    return pwd_context.verify(plain_password, hashed_password)
+    plain_password_bytes = plain_password.encode("utf-8")
+
+    try:
+        if hashed_password.startswith(BCRYPT_SHA256_PREFIX):
+            # New format: SHA-256 + bcrypt to avoid bcrypt's 72-byte input limit.
+            stored_hash = hashed_password[len(BCRYPT_SHA256_PREFIX) :].encode("utf-8")
+            digest = hashlib.sha256(plain_password_bytes).digest()
+            candidate = base64.b64encode(digest)
+            return bcrypt.checkpw(candidate, stored_hash)
+
+        if hashed_password.startswith("$2"):
+            # Legacy bcrypt hashes may have been created with implicit truncation.
+            candidate = plain_password_bytes[:72]
+            return bcrypt.checkpw(candidate, hashed_password.encode("utf-8"))
+
+        return False
+    except ValueError as exc:
+        # Treat malformed hash / invalid bcrypt input as non-match.
+        if "Invalid salt" in str(exc) or "72 bytes" in str(exc):
+            return False
+        return False
 
 
 def get_password_hash(password: str) -> str:
-    return pwd_context.hash(password)
+    password_bytes = password.encode("utf-8")
+    digest = hashlib.sha256(password_bytes).digest()
+    normalized = base64.b64encode(digest)
+    bcrypt_hash = bcrypt.hashpw(normalized, bcrypt.gensalt()).decode("utf-8")
+    return f"{BCRYPT_SHA256_PREFIX}{bcrypt_hash}"
 
 
 def create_access_token(data: dict, expires_delta: timedelta | None = None) -> str:

@@ -23,5 +23,5 @@ pydantic-settings
 
 # Auth
 PyJWT
-passlib[bcrypt]
+bcrypt
 email-validator
