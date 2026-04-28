@@ -60,39 +60,6 @@ ENGLISH_LEVEL_MAP = {
 
 explain_sem = asyncio.Semaphore(3)
 
-TERM_NORMALIZATION_RULES = [
-    (r"\bch[uú]\s*y\s*đa\s*đầu\b", "Multi-Head Attention"),
-    (r"\bmạng\s*nhớ\s*đầu\s*-\s*cuối\b", "end-to-end memory networks"),
-    (r"\bmạng\s*nhớ\s*đầu\s*cuối\b", "end-to-end memory networks"),
-]
-
-
-def normalize_academic_translation(text: str | None) -> str | None:
-    if not isinstance(text, str) or not text:
-        return text
-
-    normalized = text
-    for pattern, replacement in TERM_NORMALIZATION_RULES:
-        normalized = re.sub(pattern, replacement, normalized, flags=re.IGNORECASE)
-    return normalized
-
-
-def normalize_llm_payload(payload: dict | None) -> dict | None:
-    if not isinstance(payload, dict):
-        return payload
-
-    if "vietnamese_translation" in payload:
-        payload["vietnamese_translation"] = normalize_academic_translation(
-            payload.get("vietnamese_translation")
-        )
-
-    if isinstance(payload.get("translations"), list):
-        for item in payload["translations"]:
-            if isinstance(item, dict) and "translation" in item:
-                item["translation"] = normalize_academic_translation(item.get("translation"))
-
-    return payload
-
 
 async def call_llm_for_explanation(
     target_word: str, context: str, english_level: str = "cơ bản"
@@ -121,7 +88,8 @@ async def call_llm_for_explanation(
                     temperature=0.1,
                     max_tokens=800,
                 )
-                return normalize_llm_payload(json.loads(response.choices[0].message.content))
+                # Parse và trả về trực tiếp, không qua bước Regex
+                return json.loads(response.choices[0].message.content)
             except Exception as e:
                 print(f"LLM Error (Vocab) Attempt {attempt+1}: {e}")
                 if "429" in str(e) and attempt < 3:
@@ -163,7 +131,8 @@ async def translate_elements_inline(elements: list[ScanElement]) -> list[dict]:
                 max_tokens=2000,
             )
             content = response.choices[0].message.content or "{}"
-            data = normalize_llm_payload(json.loads(content))
+            # Parse trực tiếp từ chuỗi JSON
+            data = json.loads(content)
 
             translations = data.get("translations", [])
             result = []
