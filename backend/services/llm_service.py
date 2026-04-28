@@ -1,0 +1,123 @@
+import json
+from openai import AsyncOpenAI
+from config import OPENAI_API_KEY
+from schemas import ScanElement
+import os
+
+llm_client = AsyncOpenAI(api_key=OPENAI_API_KEY)
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+PROMPTS_DIR = os.path.join(BASE_DIR, "system_prompt.json")
+
+def load_prompts():
+    try:
+        with open(PROMPTS_DIR, 'r', encoding='utf-8') as f:
+            return json.load(f)
+    except Exception as e:
+        print(f"LLM Error (Prompts): {e}")
+        return {}
+
+PROMPTS = load_prompts()    
+
+ENGLISH_LEVEL_MAP = {
+    "A1-A2": "Người mới bắt đầu (A1 - A2 / IELTS < 4.0) - Cần giải thích đơn giản, dễ hiểu.",
+    "B1": "Trung bình (B1 / IELTS 4.0 - 5.0 / TOEIC 450 - 600) - Đã có nền tảng cơ bản, cần giải thích từ vựng trung cấp.",
+    "B2": "Khá (B2 / IELTS 5.5 - 6.5 / TOEIC 600 - 750) - Có khả năng đọc hiểu tốt, chỉ cần giải thích các từ vựng khó hoặc học thuật.",
+    "C1": "Cao cấp (C1 / IELTS 7.0 - 8.0 / TOEIC > 750) - Gần như thông thạo, chỉ cần giải thích các thuật ngữ chuyên ngành sâu.",
+    "C2": "Thành thạo (C2 / IELTS 8.5 - 9.0) - Trình độ bản xứ, chỉ cần giải thích các khái niệm cực kỳ chuyên sâu và hẹp."
+}
+
+import asyncio
+
+explain_sem = asyncio.Semaphore(3)
+
+async def call_llm_for_explanation(target_word: str, context: str, english_level: str="cơ bản") -> dict:
+    vocab_prompts = PROMPTS.get("vocab_explanation", {})
+    system_prompt = vocab_prompts.get("system", "You are a helpful academic JSON API.")
+    user_template = vocab_prompts.get("user", "")
+
+    mapped_level = ENGLISH_LEVEL_MAP.get(english_level, english_level)
+
+    prompt = user_template.format(
+        english_level=mapped_level,
+        context=context,
+        target_word=target_word
+    )
+
+    async with explain_sem:
+        for attempt in range(4):
+            try:
+                response = await llm_client.chat.completions.create(
+                    model="gpt-4o-mini",
+                    response_format={ "type": "json_object" },
+                    messages=[
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": prompt}
+                    ],
+                    temperature=0.1,
+                    max_tokens=800
+                )
+                return json.loads(response.choices[0].message.content)
+            except Exception as e:
+                print(f"LLM Error (Vocab) Attempt {attempt+1}: {e}")
+                if "429" in str(e) and attempt < 3:
+                    import re
+                    wait_time = 2 ** attempt
+                    match = re.search(r'try again in (\d+(?:\.\d+)?)(ms|s)', str(e))
+                    if match:
+                        val = float(match.group(1))
+                        if match.group(2) == 'ms':
+                            val /= 1000.0
+                        wait_time = val + 0.5
+                    await asyncio.sleep(wait_time)
+                    continue
+                return None
+        return None
+
+async def translate_elements_inline(elements: list[ScanElement]) -> list[dict]:
+    if not elements:
+        return []
+
+    items = "\n".join(
+        f"[{i}] {el.html_context if el.html_context else el.text_context}"  
+        for i, el in enumerate(elements)
+    )
+
+    inline_prompts = PROMPTS.get("inline_translation", {})
+    system_prompt = inline_prompts.get("system", "")
+
+    for attempt in range(4):
+        try:
+            response = await llm_client.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": items},
+                ],
+                response_format={"type": "json_object"},
+                temperature=0.1,
+                max_tokens=2000
+            )
+            content = response.choices[0].message.content or "{}"
+            data = json.loads(content)
+            
+            translations = data.get("translations", [])
+            result = []
+            for item in translations:
+                if isinstance(item, dict) and "index" in item and "translation" in item:
+                    result.append({"index": item["index"], "translation": item["translation"]})
+            return result
+        except Exception as e:
+            print(f"LLM Error (Inline) Attempt {attempt+1}: {e}")
+            if "429" in str(e) and attempt < 3:
+                import re
+                wait_time = 2 ** attempt
+                match = re.search(r'try again in (\d+(?:\.\d+)?)(ms|s)', str(e))
+                if match:
+                    val = float(match.group(1))
+                    if match.group(2) == 'ms':
+                        val /= 1000.0
+                    wait_time = val + 0.5
+                await asyncio.sleep(wait_time)
+                continue
+            return []
+    return []

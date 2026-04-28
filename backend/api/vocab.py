@@ -1,0 +1,148 @@
+from fastapi import APIRouter, Depends, Query
+from sqlalchemy.future import select
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import func
+from typing import List, Optional
+import datetime
+
+from database import get_db, Vocabulary, UserVocabProgress, User
+from utils.security import get_current_user
+
+router = APIRouter()
+
+@router.get("/stats")
+async def get_vocab_stats(
+    db: AsyncSession = Depends(get_db), 
+    current_user: User = Depends(get_current_user)
+):
+    # Get counts by status
+    query = select(UserVocabProgress.status, func.count(UserVocabProgress.vocab_id)).where(
+        UserVocabProgress.user_id == current_user.user_id
+    ).group_by(UserVocabProgress.status)
+    
+    res = await db.execute(query)
+    status_counts = {"learning": 0, "mastered": 0, "unseen": 0}
+    for row in res:
+        if row[0] in status_counts:
+            status_counts[row[0]] = row[1]
+        else:
+            status_counts[row[0]] = row[1]
+            
+    # Calculate total queried words (all rows for this user)
+    total_words = sum(status_counts.values())
+    
+    # Calculate streak (mock implementation for now, you can add a last_active_date to User table)
+    # Since we don't have login history, let's just return a default value or calculate from recent updates
+    streak = 1 
+    
+    return {
+        "status": "success",
+        "data": {
+            "total_words": total_words,
+            "learning": status_counts.get("learning", 0),
+            "mastered": status_counts.get("mastered", 0),
+            "unseen": status_counts.get("unseen", 0),
+            "streak": streak
+        }
+    }
+
+@router.get("/list")
+async def get_vocab_list(
+    page: int = 1,
+    limit: int = 20,
+    search: Optional[str] = None,
+    status: Optional[str] = None,
+    specialization: Optional[str] = None,
+    difficulty: Optional[str] = None,
+    db: AsyncSession = Depends(get_db), 
+    current_user: User = Depends(get_current_user)
+):
+    offset = (page - 1) * limit
+    
+    query = select(
+        Vocabulary.word,
+        UserVocabProgress.status,
+        UserVocabProgress.specialization,
+        UserVocabProgress.difficulty,
+        UserVocabProgress.context,
+        UserVocabProgress.translation,
+        UserVocabProgress.next_review_date
+    ).join(
+        Vocabulary, UserVocabProgress.vocab_id == Vocabulary.id
+    ).where(
+        UserVocabProgress.user_id == current_user.user_id
+    )
+    
+    if search:
+        query = query.where(Vocabulary.word.ilike(f"%{search}%"))
+        
+    if status and status != "all":
+        query = query.where(UserVocabProgress.status == status)
+    
+    if specialization and specialization != "all":
+        query = query.where(UserVocabProgress.specialization == specialization)
+
+    if difficulty and difficulty != "all":
+        query = query.where(UserVocabProgress.difficulty == difficulty)
+        
+    # Count total
+    count_query = select(func.count()).select_from(query.subquery())
+    total_res = await db.execute(count_query)
+    total = total_res.scalar() or 0
+    
+    # Get paginated data
+    query = query.order_by(UserVocabProgress.next_review_date.desc()).offset(offset).limit(limit)
+    res = await db.execute(query)
+    
+    items = []
+    for row in res:
+        items.append({
+            "word": row.word,
+            "status": row.status,
+            "specialization": row.specialization,
+            "difficulty": row.difficulty,
+            "context": row.context,
+            "translation": row.translation,
+            "next_review_date": row.next_review_date.isoformat() if row.next_review_date else None
+        })
+        
+    return {
+        "status": "success",
+        "data": items,
+        "total": total,
+        "page": page,
+        "limit": limit
+    }
+
+@router.get("/practice")
+async def get_practice_list(
+    db: AsyncSession = Depends(get_db), 
+    current_user: User = Depends(get_current_user)
+):
+    now = datetime.datetime.utcnow()
+    query = select(
+        Vocabulary.word,
+        UserVocabProgress.context,
+        UserVocabProgress.translation
+    ).join(
+        Vocabulary, UserVocabProgress.vocab_id == Vocabulary.id
+    ).where(
+        UserVocabProgress.user_id == current_user.user_id,
+        UserVocabProgress.next_review_date <= now,
+        UserVocabProgress.status != "unseen" # Only review words that are learning or mastered
+    ).order_by(UserVocabProgress.next_review_date.asc()).limit(30) # get max 30 words per session
+    
+    res = await db.execute(query)
+    
+    items = []
+    for row in res:
+        items.append({
+            "word": row.word,
+            "context": row.context,
+            "translation": row.translation
+        })
+        
+    return {
+        "status": "success",
+        "data": items
+    }
