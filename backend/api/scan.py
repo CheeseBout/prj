@@ -109,16 +109,16 @@ async def scan_vocabulary(
                             "knowledge_state": user_state,
                         }
                     )
-                    
-                    # CẬP NHẬT: Lưu cache context tạm thời cho User (Hit Cache)
+
+                    # Update: cache context tam thoi cho user (Hit Cache)
                     if redis_client is not None and cache_state.is_available:
                         try:
-                            user_context_key = f"user_context:{current_user.user_id}:{word}" # hoặc meta['word']
+                            user_context_key = f"user_context:{current_user.user_id}:{word}"
                             context_payload = {
                                 "context": text,
                                 "translation": llm_data.get("vietnamese_translation", ""),
-                                "specialization": llm_data.get("specialization", "general"), # THÊM MỚI
-                                "difficulty": llm_data.get("difficulty", "intermediate")     # THÊM MỚI
+                                "specialization": llm_data.get("specialization"),
+                                "difficulty": llm_data.get("difficulty"),
                             }
                             await redis_client.setex(user_context_key, 86400, json.dumps(context_payload))
                         except Exception:
@@ -143,12 +143,14 @@ async def scan_vocabulary(
             if redis_client is not None and cache_state.is_available:
                 try:
                     await redis_client.setex(meta["cache_key"], 604800, json.dumps(llm_data))
-                    
-                    # CẬP NHẬT: Lưu cache context tạm thời cho User (Gọi LLM Mới)
+
+                    # Update: cache context tam thoi cho user (Fresh LLM)
                     user_context_key = f"user_context:{current_user.user_id}:{meta['word']}"
                     context_payload = {
                         "context": meta["element"].text_context,
-                        "translation": llm_data.get("vietnamese_translation", "")
+                        "translation": llm_data.get("vietnamese_translation", ""),
+                        "specialization": llm_data.get("specialization"),
+                        "difficulty": llm_data.get("difficulty"),
                     }
                     await redis_client.setex(user_context_key, 86400, json.dumps(context_payload))
                 except Exception:
@@ -201,3 +203,5 @@ async def scan_inline(payload: ScanPayload):
     ]
 
     return {"status": "success", "highlights": [], "translations": translations}
+
+

@@ -50,6 +50,60 @@ def get_prompt_cache_version() -> str:
 
 PROMPTS = get_prompts()
 
+
+def _normalize_label(value: str | None) -> str | None:
+    if not value or not isinstance(value, str):
+        return None
+    normalized = re.sub(r"[^a-z0-9]+", "_", value.strip().lower()).strip("_")
+    return normalized or None
+
+
+def _normalize_specialization(value: str | None) -> str | None:
+    normalized = _normalize_label(value)
+    if not normalized:
+        return None
+
+    alias_map = {
+        "cs": "computer_science",
+        "comp_sci": "computer_science",
+        "machine_learning": "artificial_intelligence",
+        "ml": "artificial_intelligence",
+        "ai": "artificial_intelligence",
+        "nlp": "artificial_intelligence",
+        "biomedicine": "biomedical",
+        "medical": "medicine",
+        "healthcare": "medicine",
+    }
+    return alias_map.get(normalized, normalized)
+
+
+def _normalize_difficulty(value: str | None) -> str | None:
+    normalized = _normalize_label(value)
+    if not normalized:
+        return None
+
+    alias_map = {
+        "beginner": "basic",
+        "elementary": "basic",
+        "easy": "basic",
+        "medium": "intermediate",
+        "moderate": "intermediate",
+        "hard": "advanced",
+        "expert": "advanced",
+    }
+    return alias_map.get(normalized, normalized)
+
+
+def _normalize_vocab_payload(payload: dict) -> dict:
+    return {
+        "vietnamese_translation": (payload.get("vietnamese_translation") or "").strip(),
+        "en_explanation": (payload.get("en_explanation") or "").strip(),
+        "vi_explanation": (payload.get("vi_explanation") or "").strip(),
+        "part_of_speech": (payload.get("part_of_speech") or "").strip(),
+        "specialization": _normalize_specialization(payload.get("specialization")),
+        "difficulty": _normalize_difficulty(payload.get("difficulty")),
+    }
+
 ENGLISH_LEVEL_MAP = {
     "A1-A2": "Người mới bắt đầu (A1 - A2 / IELTS < 4.0) - Cần giải thích đơn giản, dễ hiểu.",
     "B1": "Trung bình (B1 / IELTS 4.0 - 5.0 / TOEIC 450 - 600) - Đã có nền tảng cơ bản, cần giải thích từ vựng trung cấp.",
@@ -89,7 +143,8 @@ async def call_llm_for_explanation(
                     max_tokens=800,
                 )
                 # Parse và trả về trực tiếp, không qua bước Regex
-                return json.loads(response.choices[0].message.content)
+                data = json.loads(response.choices[0].message.content)
+                return _normalize_vocab_payload(data)
             except Exception as e:
                 print(f"LLM Error (Vocab) Attempt {attempt+1}: {e}")
                 if "429" in str(e) and attempt < 3:
