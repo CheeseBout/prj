@@ -4,13 +4,16 @@
   let currentCleanupFunction = null;
 
   const LOGIN_URL = "http://localhost:3000/login";
+  let isExtensionEnabled = false;
   let isShowingLoginPrompt = false;
 
   function showLoginPrompt() {
+    if (!isExtensionEnabled) return;
     if (isShowingLoginPrompt) return;
     isShowingLoginPrompt = true;
 
     const toast = document.createElement("div");
+    toast.id = "ll-login-prompt-toast"; 
     toast.style.cssText = `
         position: fixed; bottom: 20px; right: 20px; background: #fff;
         border-left: 4px solid #f44336; box-shadow: 0 4px 12px rgba(0,0,0,0.15);
@@ -52,10 +55,19 @@
   }
 
   function switchMode(newMode, enabled = true) {
+    isExtensionEnabled = enabled;
     const targetMode = newMode === "mode_inline" ? "mode_inline" : "mode_vocab";
     console.log(
       `[Extension] Trạng thái: ${enabled ? "BẬT" : "TẮT"} | Chế độ: ${targetMode}`,
     );
+
+    if (!enabled) {
+      const existingToast = document.getElementById("ll-login-prompt-toast");
+      if (existingToast) {
+        existingToast.remove();
+      }
+      isShowingLoginPrompt = false;
+    }
 
     // Luôn dọn dẹp chế độ cũ/hiện tại trước
     if (currentCleanupFunction) {
@@ -79,6 +91,17 @@
     const mode = result.translationMode || "mode_vocab";
     const enabled = result.extensionEnabled !== false; // Mặc định là true nếu chưa lưu
     switchMode(mode, enabled);
+  });
+
+  chrome.storage.onChanged.addListener((changes, namespace) => {
+    if (namespace === "sync") {
+      // Nếu có bất kỳ sự thay đổi nào về setting, đọc lại và apply ngay
+      chrome.storage.sync.get(["translationMode", "extensionEnabled"], (result) => {
+        const mode = result.translationMode || "mode_vocab";
+        const enabled = result.extensionEnabled !== false;
+        switchMode(mode, enabled);
+      });
+    }
   });
 
   // Lắng nghe Message từ popup.js
