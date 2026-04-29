@@ -1,4 +1,4 @@
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, Field
 from typing import List, Optional
 from enum import Enum
 from datetime import date, datetime
@@ -20,7 +20,7 @@ class ScanPayload(BaseModel):
 
 class ProgressUpdate(BaseModel):
     word: str
-    quality: int
+    quality: int = Field(..., ge=0, le=5)
     context: Optional[str] = None
     translation: Optional[str] = None
 

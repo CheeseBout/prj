@@ -10,6 +10,7 @@ from database import User, UserVocabProgress, Vocabulary, get_db
 from schemas import ManualTranslateRequest, ProgressUpdate
 from services.llm_service import call_llm_for_explanation
 from services.nlp_service import generate_cache_key
+from services.sm2 import calculate_sm2
 from utils.cache import cache_state, redis_client
 from utils.security import get_current_user
 
@@ -138,19 +139,17 @@ async def update_progress(
     if new_difficulty and not progress.difficulty:
         progress.difficulty = new_difficulty
 
-    # Logic lặp lại ngắt quãng (SRS)
-    if data.quality >= 4:
-        progress.repetitions += 1
-        progress.status = "mastered" if progress.repetitions >= 3 else "learning"
-        progress.interval_days = (progress.interval_days * 2) + 1
-        progress.next_review_date = datetime.datetime.utcnow() + datetime.timedelta(
-            days=progress.interval_days
-        )
-    elif data.quality >= 0:
-        progress.repetitions = 0
-        progress.interval_days = 1
-        progress.next_review_date = datetime.datetime.utcnow() + datetime.timedelta(days=1)
-        progress.status = "learning"
+    sm2_result = calculate_sm2(
+        repetitions=progress.repetitions,
+        interval_days=progress.interval_days,
+        ease_factor=progress.ease_factor,
+        quality=data.quality,
+    )
+    progress.repetitions = sm2_result["repetitions"]
+    progress.interval_days = sm2_result["interval_days"]
+    progress.ease_factor = sm2_result["ease_factor"]
+    progress.next_review_date = sm2_result["next_review_date"]
+    progress.status = sm2_result["status"]
 
     # Logic tính toán Streak của người dùng
     today = datetime.datetime.utcnow().date()
@@ -165,7 +164,15 @@ async def update_progress(
 
     await db.commit()
 
-    return {"status": "success", "new_status": progress.status}
+    return {
+        "status": "success",
+        "new_status": progress.status,
+        "quality": sm2_result["quality"],
+        "repetitions": progress.repetitions,
+        "interval_days": progress.interval_days,
+        "ease_factor": progress.ease_factor,
+        "next_review_date": progress.next_review_date.isoformat(),
+    }
 
 @router.post("/translate-manual")
 async def translate_manual(

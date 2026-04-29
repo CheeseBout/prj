@@ -128,13 +128,16 @@ async def get_practice_list(
     query = select(
         Vocabulary.word,
         UserVocabProgress.context,
-        UserVocabProgress.translation
+        UserVocabProgress.translation,
+        UserVocabProgress.specialization,
+        UserVocabProgress.difficulty,
+        UserVocabProgress.status,
+        UserVocabProgress.next_review_date,
     ).join(
         Vocabulary, UserVocabProgress.vocab_id == Vocabulary.id
     ).where(
         UserVocabProgress.user_id == current_user.user_id,
         UserVocabProgress.next_review_date <= now,
-        UserVocabProgress.status != "unseen" 
     ).order_by(UserVocabProgress.next_review_date.asc()).limit(30) 
     
     res = await db.execute(query)
@@ -144,7 +147,11 @@ async def get_practice_list(
         items.append({
             "word": row.word,
             "context": row.context,
-            "translation": row.translation
+            "translation": row.translation,
+            "specialization": row.specialization,
+            "difficulty": row.difficulty,
+            "status": row.status,
+            "next_review_date": row.next_review_date.isoformat() if row.next_review_date else None,
         })
         
     return {

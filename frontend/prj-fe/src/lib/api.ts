@@ -214,6 +214,23 @@ export interface ManualTranslateResponse {
   message?: string;
 }
 
+export interface ProgressUpdatePayload {
+  word: string;
+  quality: number;
+  context?: string;
+  translation?: string;
+}
+
+export interface ProgressUpdateResponse {
+  status: string;
+  new_status?: string;
+  quality?: number;
+  repetitions?: number;
+  interval_days?: number;
+  ease_factor?: number;
+  next_review_date?: string;
+}
+
 export const getVocabStats = async (): Promise<VocabStats> => {
   return requestJson<VocabStats>("/api/vocab/stats", {
     method: "GET",
@@ -253,11 +270,17 @@ export const translateManual = async (
   });
 };
 
-export const updateProgress = async (
-  payload: { word: string; quality: number; context?: string; translation?: string }
-): Promise<{ status: string; new_status?: string }> => {
-  return requestJson<{ status: string; new_status?: string }>("/api/update-progress", {
+export const updateVocabProgress = async (
+  payload: ProgressUpdatePayload
+): Promise<ProgressUpdateResponse> => {
+  return requestJson<ProgressUpdateResponse>("/api/update-progress", {
     method: "POST",
     body: JSON.stringify(payload),
   });
+};
+
+export const updateProgress = async (
+  payload: ProgressUpdatePayload
+): Promise<ProgressUpdateResponse> => {
+  return updateVocabProgress(payload);
 };

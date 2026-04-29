@@ -15,7 +15,7 @@ PROMPTS_DIR = os.path.join(BASE_DIR, "system_prompt.json")
 
 _PROMPTS_CACHE = {}
 _PROMPTS_MTIME = None
-PROMPT_CACHE_VERSION = "v2"
+PROMPT_CACHE_VERSION = "v3"
 
 
 def load_prompts():
