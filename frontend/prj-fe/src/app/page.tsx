@@ -1,197 +1,196 @@
+"use client";
+
 import Link from "next/link";
+import { motion } from "framer-motion";
 import {
   ArrowRight,
   BrainCircuit,
-  Flame,
   Languages,
   ScanSearch,
-  Sparkles,
+  Flame,
 } from "lucide-react";
 
 const featureCards = [
   {
     icon: ScanSearch,
+    meta: "Translation",
     title: "Context-first translation",
     description:
       "Detect difficult words directly inside source text and explain them with domain-aware meaning.",
   },
   {
     icon: Languages,
+    meta: "Bilingual",
     title: "EN-VI bilingual explanations",
     description:
       "Each term returns concise English explanation and Vietnamese interpretation in one view.",
   },
   {
     icon: BrainCircuit,
+    meta: "Memory",
     title: "SM-2 smart practice",
     description:
       "Words move through unseen, learning, and mastered with spaced repetition scheduling.",
   },
   {
     icon: Flame,
+    meta: "Momentum",
     title: "Daily momentum",
     description:
       "Streak and progress widgets keep learners consistent without adding extra friction.",
   },
 ];
 
-const flowSteps = [
-  "Scan article or document",
-  "Save contextual vocabulary",
-  "Review with flashcard or quiz",
-  "Track mastery on dashboard",
-];
+const fadeUp = {
+  hidden: { opacity: 0, y: 20 },
+  visible: (i: number) => ({
+    opacity: 1,
+    y: 0,
+    transition: { delay: i * 0.08, duration: 0.5, ease: "easeOut" as const },
+  }),
+};
 
 export default function HomePage() {
   return (
-    <div className="min-h-screen text-slate-900">
-      <header className="sticky top-0 z-50 border-b border-slate-900/10 bg-[rgba(255,253,248,0.85)] backdrop-blur-xl">
-        <div className="mx-auto flex w-full max-w-6xl items-center justify-between px-4 py-4 md:px-6">
-          <Link href="/" className="flex items-center gap-3">
-            <span className="flex h-10 w-10 items-center justify-center rounded-2xl bg-[#0f4c5c] text-white">
-              <Languages size={20} />
+    <div className="flex min-h-screen flex-col text-foreground">
+      {/* ── Header ───────────────────────────────────────────────── */}
+      <header className="sticky top-0 z-50 h-20 border-b border-foreground/10 bg-[rgba(250,249,246,0.85)] backdrop-blur-md">
+        <div className="mx-auto flex h-full max-w-6xl items-center justify-between px-6">
+          <Link href="/" className="flex items-center gap-2">
+            <span className="font-serif text-xl font-bold tracking-tight">
+              Lexi<span className="text-accent">Bridge</span>
             </span>
-            <div>
-              <p className="text-sm font-semibold uppercase tracking-[0.18em] text-[#0f4c5c]">
-                LexiBridge
-              </p>
-              <p className="text-xs text-slate-500">Context Learning Assistant</p>
-            </div>
           </Link>
-          <div className="flex items-center gap-2">
+
+          <nav className="flex items-center gap-6">
             <Link
               href="/login"
-              className="rounded-xl border border-slate-900/15 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-white"
+              className="text-sm font-medium text-foreground/60 transition hover:text-foreground"
             >
               Login
             </Link>
             <Link
               href="/register"
-              className="rounded-xl bg-[#0f4c5c] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#006d77]"
+              className="rounded-full bg-foreground px-5 py-2 text-sm font-semibold text-background transition hover:bg-foreground/85"
             >
-              Start Free
+              Get Started
             </Link>
-          </div>
+          </nav>
         </div>
       </header>
 
-      <main>
-        <section className="mx-auto grid w-full max-w-6xl gap-10 px-4 pb-14 pt-14 md:grid-cols-[1.2fr_0.8fr] md:px-6 md:pt-20">
-          <div>
-            <span className="inline-flex items-center gap-2 rounded-full border border-slate-900/10 bg-white/70 px-4 py-1 text-xs font-semibold uppercase tracking-[0.16em] text-[#0f4c5c]">
-              <Sparkles size={14} />
+      {/* ── Hero ─────────────────────────────────────────────────── */}
+      <main className="flex-1">
+        <section className="flex flex-col items-center justify-center px-6 pb-32 pt-20 text-center">
+          <motion.div
+            initial={{ opacity: 0, y: 16 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5, ease: "easeOut" }}
+            className="mx-auto max-w-4xl"
+          >
+            <span className="inline-flex items-center gap-2 rounded-full border border-foreground/10 px-4 py-1.5 text-xs font-semibold uppercase tracking-widest text-foreground/50">
+              <Languages size={14} className="text-accent" />
               Designed for EN-VI learners
             </span>
-            <h1 className="mt-5 text-4xl leading-tight md:text-6xl">
-              Translate with context.
+
+            <h1 className="mt-8 font-serif text-5xl leading-[1.1] md:text-7xl">
+              Translate with <em className="italic">context.</em>
               <br />
-              Learn with memory science.
+              Learn with{" "}
+              <span className="text-accent">memory science.</span>
             </h1>
-            <p className="mt-5 max-w-2xl text-base text-slate-600 md:text-lg">
-              LexiBridge helps Vietnamese learners read English materials faster, save useful
-              vocabulary, and review with spaced repetition in one seamless flow.
+
+            <p className="mx-auto mt-6 max-w-2xl text-lg leading-relaxed text-foreground/55">
+              LexiBridge helps Vietnamese learners read English materials faster,
+              save useful vocabulary, and review with spaced repetition — all in
+              one seamless flow.
             </p>
-            <div className="mt-8 flex flex-col gap-3 sm:flex-row">
+
+            <div className="mt-10 flex flex-col items-center justify-center gap-4 sm:flex-row">
               <Link
                 href="/register"
-                className="inline-flex items-center justify-center gap-2 rounded-2xl bg-[#ff7f50] px-6 py-3 text-sm font-semibold text-white transition hover:bg-[#ff9d77]"
+                className="group inline-flex items-center gap-2 rounded-sm bg-accent px-8 py-3.5 text-sm font-semibold text-white transition hover:bg-[#d04f00]"
               >
                 Create account
-                <ArrowRight size={16} />
+                <ArrowRight
+                  size={16}
+                  className="transition group-hover:translate-x-1"
+                />
               </Link>
               <Link
                 href="/dashboard"
-                className="inline-flex items-center justify-center gap-2 rounded-2xl border border-slate-900/15 bg-white/80 px-6 py-3 text-sm font-semibold text-slate-800 transition hover:bg-white"
+                className="inline-flex items-center gap-2 border border-foreground/15 px-8 py-3.5 text-sm font-semibold text-foreground transition hover:bg-foreground/5"
               >
                 View overview
               </Link>
             </div>
-          </div>
-
-          <div className="panel rounded-3xl p-6">
-            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
-              Product snapshot
-            </p>
-            <div className="mt-4 rounded-2xl bg-[#0f4c5c] p-5 text-white">
-              <p className="text-sm text-white/80">Current context</p>
-              <p className="mt-2 text-lg font-semibold leading-snug">
-                &ldquo;Probabilistic forecast quality&rdquo;
-              </p>
-              <div className="mt-4 rounded-xl bg-white/10 p-3">
-                <p className="text-xs uppercase tracking-[0.14em] text-white/75">Vietnamese meaning</p>
-                <p className="mt-1 text-sm">Do chat du bao xac suat</p>
-              </div>
-              <div className="mt-3 rounded-xl bg-white/10 p-3">
-                <p className="text-xs uppercase tracking-[0.14em] text-white/75">EN explanation</p>
-                <p className="mt-1 text-sm">
-                  Measures how well a model predicts uncertain outcomes.
-                </p>
-              </div>
-            </div>
-            <ul className="mt-5 space-y-3 text-sm text-slate-600">
-              {flowSteps.map((step, idx) => (
-                <li key={step} className="flex items-center gap-3">
-                  <span className="flex h-6 w-6 items-center justify-center rounded-full bg-slate-900/10 text-xs font-semibold">
-                    {idx + 1}
-                  </span>
-                  {step}
-                </li>
-              ))}
-            </ul>
-          </div>
+          </motion.div>
         </section>
 
-        <section className="mx-auto w-full max-w-6xl px-4 pb-16 md:px-6">
-          <div className="grid gap-4 md:grid-cols-2">
-            {featureCards.map((card) => {
+        {/* ── Feature Section ────────────────────────────────────── */}
+        <section className="mx-auto max-w-6xl border-t border-foreground/10 px-6 py-20">
+          <div className="grid gap-0 md:grid-cols-2">
+            {featureCards.map((card, index) => {
               const Icon = card.icon;
               return (
-                <article key={card.title} className="panel rounded-3xl p-6">
-                  <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-[#e2f2f4] text-[#0f4c5c]">
-                    <Icon size={20} />
+                <motion.article
+                  key={card.title}
+                  custom={index}
+                  initial="hidden"
+                  whileInView="visible"
+                  viewport={{ once: true, margin: "-60px" }}
+                  variants={fadeUp}
+                  className={`flex flex-col gap-4 border-foreground/10 p-10 ${
+                    index % 2 === 0 ? "md:border-r" : ""
+                  } ${index < 2 ? "border-b" : ""}`}
+                >
+                  <span className="flex h-12 w-12 items-center justify-center rounded-full border border-foreground/10">
+                    <Icon size={20} className="text-accent" />
                   </span>
-                  <h2 className="mt-4 text-2xl">{card.title}</h2>
-                  <p className="mt-3 text-sm leading-relaxed text-slate-600">{card.description}</p>
-                </article>
+                  <p className="editorial-meta">{card.meta}</p>
+                  <h3 className="font-serif text-2xl">{card.title}</h3>
+                  <p className="text-sm leading-relaxed text-foreground/55">
+                    {card.description}
+                  </p>
+                </motion.article>
               );
             })}
           </div>
         </section>
 
-        <section className="mx-auto w-full max-w-6xl px-4 pb-20 md:px-6">
-          <div className="panel rounded-3xl p-6 md:p-10">
-            <div className="grid gap-8 md:grid-cols-[1fr_auto] md:items-center">
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.15em] text-slate-500">
-                  Built for academic reading
-                </p>
-                <h3 className="mt-2 text-3xl md:text-4xl">
-                  Move from &ldquo;translate quickly&rdquo; to &ldquo;remember deeply&rdquo;
-                </h3>
-                <p className="mt-4 max-w-2xl text-sm text-slate-600 md:text-base">
-                  Landing, auth, overview, vocabulary hub, and practice room are now aligned in one
-                  visual system so your app feels like one product from first login to daily review.
-                </p>
-              </div>
-              <div className="flex flex-wrap gap-2 md:justify-end">
-                <span className="rounded-full bg-[#0f4c5c] px-4 py-2 text-xs font-semibold text-white">
-                  Landing
-                </span>
-                <span className="rounded-full bg-[#006d77] px-4 py-2 text-xs font-semibold text-white">
-                  Dashboard
-                </span>
-                <span className="rounded-full bg-[#ff7f50] px-4 py-2 text-xs font-semibold text-white">
-                  Practice
-                </span>
-              </div>
+        {/* ── CTA Section ────────────────────────────────────────── */}
+        <section className="mx-auto max-w-6xl px-6 pb-20">
+          <div className="border border-foreground/10 p-10 md:p-16">
+            <p className="editorial-meta">Built for academic reading</p>
+            <h2 className="mt-4 font-serif text-3xl md:text-5xl">
+              Move from &ldquo;<em className="italic">translate quickly</em>
+              &rdquo; to &ldquo;
+              <em className="italic">remember deeply</em>&rdquo;
+            </h2>
+            <p className="mt-6 max-w-2xl text-sm leading-relaxed text-foreground/55 md:text-base">
+              Landing, auth, overview, vocabulary hub, and practice room are now
+              aligned in one visual system so your app feels like one product
+              from first login to daily review.
+            </p>
+            <div className="mt-8 flex flex-wrap gap-3">
+              <span className="rounded-full bg-foreground px-4 py-2 text-xs font-semibold text-background">
+                Landing
+              </span>
+              <span className="rounded-full bg-foreground/80 px-4 py-2 text-xs font-semibold text-background">
+                Dashboard
+              </span>
+              <span className="rounded-full bg-accent px-4 py-2 text-xs font-semibold text-white">
+                Practice
+              </span>
             </div>
           </div>
         </section>
       </main>
 
-      <footer className="border-t border-slate-900/10 bg-white/60">
-        <div className="mx-auto flex w-full max-w-6xl items-center justify-between px-4 py-5 text-sm text-slate-500 md:px-6">
-          <p>LexiBridge</p>
+      {/* ── Footer ───────────────────────────────────────────────── */}
+      <footer className="h-16 border-t border-foreground/10">
+        <div className="mx-auto flex h-full max-w-6xl items-center justify-between px-6 text-sm text-foreground/40">
+          <p className="font-serif">LexiBridge</p>
           <p>EN-VI Contextual Learning Platform</p>
         </div>
       </footer>

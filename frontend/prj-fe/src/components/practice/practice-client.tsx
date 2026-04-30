@@ -1,8 +1,8 @@
 "use client";
 
-import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { ArrowLeft, BrainCircuit, RotateCcw } from "lucide-react";
+import { motion } from "framer-motion";
+import { ArrowLeft, ArrowRight, BrainCircuit, RotateCcw } from "lucide-react";
 
 import {
   getPracticeList,
@@ -11,13 +11,17 @@ import {
   VocabItem,
 } from "@/lib/api";
 
-const qualityChoices: Array<{ quality: number; label: string; className: string }> = [
-  { quality: 0, label: "Quen han", className: "bg-red-100 text-red-800 border-red-200 hover:bg-red-200" },
-  { quality: 1, label: "Sai, hoi quen", className: "bg-orange-100 text-orange-800 border-orange-200 hover:bg-orange-200" },
-  { quality: 2, label: "Sai, de nho lai", className: "bg-yellow-100 text-yellow-800 border-yellow-200 hover:bg-yellow-200" },
-  { quality: 3, label: "Dung, hoi kho", className: "bg-blue-100 text-blue-800 border-blue-200 hover:bg-blue-200" },
-  { quality: 4, label: "Dung, nho tot", className: "bg-green-100 text-green-800 border-green-200 hover:bg-green-200" },
-  { quality: 5, label: "Rat de", className: "bg-emerald-100 text-emerald-800 border-emerald-200 hover:bg-emerald-200" },
+const qualityChoices: Array<{
+  quality: number;
+  label: string;
+  color: string;
+}> = [
+  { quality: 0, label: "Forgot", color: "#dc2626" },
+  { quality: 1, label: "Wrong, vague", color: "#ea580c" },
+  { quality: 2, label: "Wrong, recalled", color: "#ca8a04" },
+  { quality: 3, label: "Correct, hard", color: "#2563eb" },
+  { quality: 4, label: "Correct, good", color: "#16a34a" },
+  { quality: 5, label: "Very easy", color: "#059669" },
 ];
 
 export const PracticeClient = () => {
@@ -25,15 +29,17 @@ export const PracticeClient = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [currentIndex, setCurrentIndex] = useState(0);
-  const [showAnswer, setShowAnswer] = useState(false);
+  const [isFlipped, setIsFlipped] = useState(false);
   const [isUpdating, setIsUpdating] = useState(false);
-  const [lastResult, setLastResult] = useState<ProgressUpdateResponse | null>(null);
+  const [lastResult, setLastResult] = useState<ProgressUpdateResponse | null>(
+    null
+  );
 
   const loadPracticeList = useCallback(async () => {
     setLoading(true);
     setError(null);
     setCurrentIndex(0);
-    setShowAnswer(false);
+    setIsFlipped(false);
     setLastResult(null);
 
     try {
@@ -58,12 +64,30 @@ export const PracticeClient = () => {
   }, [loadPracticeList]);
 
   const currentWord = useMemo(
-    () => (currentIndex < practiceList.length ? practiceList[currentIndex] : null),
+    () =>
+      currentIndex < practiceList.length ? practiceList[currentIndex] : null,
     [currentIndex, practiceList]
   );
 
-  const doneCount = Math.min(currentIndex, practiceList.length);
   const totalCount = practiceList.length;
+
+  const handleFlip = () => setIsFlipped((prev) => !prev);
+
+  const goBack = () => {
+    if (currentIndex > 0) {
+      setCurrentIndex((prev) => prev - 1);
+      setIsFlipped(false);
+      setLastResult(null);
+    }
+  };
+
+  const goNext = () => {
+    if (currentIndex < totalCount - 1) {
+      setCurrentIndex((prev) => prev + 1);
+      setIsFlipped(false);
+      setLastResult(null);
+    }
+  };
 
   const handleQualitySelect = async (quality: number) => {
     if (!currentWord) return;
@@ -79,7 +103,7 @@ export const PracticeClient = () => {
       });
 
       setLastResult(result);
-      setShowAnswer(false);
+      setIsFlipped(false);
       setCurrentIndex((prev) => prev + 1);
     } catch (updateError: unknown) {
       if (updateError instanceof Error) {
@@ -93,112 +117,156 @@ export const PracticeClient = () => {
   };
 
   return (
-    <div className="space-y-5">
-      <header className="panel rounded-3xl p-5 md:p-6">
-        <div className="flex flex-wrap items-center justify-between gap-4">
-          <div>
-            <Link
-              href="/dashboard"
-              className="inline-flex items-center gap-2 text-sm font-semibold text-slate-600 hover:text-slate-900"
-            >
-              <ArrowLeft size={16} />
-              Back to overview
-            </Link>
-            <h1 className="mt-3 text-3xl md:text-4xl">Practice Room</h1>
-            <p className="mt-1 text-sm text-slate-600">
-              On tap thuat ngu chuyen nganh bang thuat toan SM-2.
-            </p>
-          </div>
-          <div className="rounded-2xl border border-slate-900/10 bg-white/75 px-4 py-3 text-sm text-slate-600">
-            <p className="font-semibold text-slate-900">
-              {doneCount}/{totalCount}
-            </p>
-            <p>words reviewed</p>
-          </div>
+    <div className="flex h-[calc(100vh-4rem)] flex-col">
+      {/* ── Header ──────────────────────────────────────────────── */}
+      <header className="flex items-center justify-between border-b border-foreground/10 pb-6">
+        <div>
+          <p className="editorial-meta">Practice room</p>
+          <h1 className="mt-2 font-serif text-3xl">
+            SM-2 <em className="italic">Flashcards.</em>
+          </h1>
+        </div>
+        <div className="text-right">
+          <p className="font-serif text-4xl font-bold text-foreground/15">
+            {String(currentIndex + 1).padStart(2, "0")}
+          </p>
+          <p className="editorial-meta">
+            of {String(totalCount).padStart(2, "0")}
+          </p>
         </div>
       </header>
 
       {error && (
-        <p className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+        <div className="mt-4 border-l-2 border-red-400 bg-red-50 px-4 py-3 text-sm text-red-700">
           {error}
-        </p>
+        </div>
       )}
 
       {lastResult?.next_review_date && (
-        <div className="panel rounded-3xl border border-[#0f4c5c]/15 bg-[#f2f9fa] p-4 text-sm text-slate-700">
-          <p className="font-semibold text-[#0f4c5c]">SM-2 da cap nhat</p>
+        <div className="mt-4 border-l-2 border-accent bg-[#fdf6f0] px-4 py-3 text-sm text-foreground/70">
+          <p className="font-semibold text-accent">SM-2 updated</p>
           <p className="mt-1">
-            Lan lap: {lastResult.repetitions ?? "-"} | Interval: {lastResult.interval_days ?? "-"} ngay | EF:{" "}
-            {typeof lastResult.ease_factor === "number" ? lastResult.ease_factor.toFixed(2) : "-"}
+            Rep: {lastResult.repetitions ?? "-"} | Interval:{" "}
+            {lastResult.interval_days ?? "-"} days | EF:{" "}
+            {typeof lastResult.ease_factor === "number"
+              ? lastResult.ease_factor.toFixed(2)
+              : "-"}
           </p>
           <p className="mt-1">
-            Hen on tiep: {new Date(lastResult.next_review_date).toLocaleString()}
+            Next review:{" "}
+            {new Date(lastResult.next_review_date).toLocaleString()}
           </p>
         </div>
       )}
 
-      <section className="panel rounded-3xl p-5 md:p-6">
+      {/* ── Flashcard Stage ─────────────────────────────────────── */}
+      <div className="flex flex-1 items-center justify-center bg-foreground/[0.02]">
         {loading ? (
-          <p className="text-sm text-slate-600">Loading due words...</p>
+          <p className="editorial-meta animate-pulse">Loading due words...</p>
         ) : !currentWord ? (
-          <div className="space-y-4 text-center">
-            <BrainCircuit className="mx-auto text-[#0f4c5c]" size={32} />
-            <p className="text-slate-700">Khong con tu den han on tap.</p>
+          <div className="space-y-6 text-center">
+            <BrainCircuit size={40} className="mx-auto text-foreground/20" />
+            <p className="font-serif text-2xl text-foreground/40">
+              No words due for review.
+            </p>
             <button
               type="button"
               onClick={() => void loadPracticeList()}
-              className="inline-flex items-center gap-2 rounded-xl bg-[#0f4c5c] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#006d77]"
+              className="group inline-flex items-center gap-2 bg-foreground px-5 py-3 text-sm font-semibold text-background transition hover:bg-foreground/85"
             >
               <RotateCcw size={15} />
-              Tai lai danh sach
+              Reload list
             </button>
           </div>
         ) : (
-          <div className="space-y-6">
-            <div className="space-y-3 rounded-2xl border border-slate-900/10 bg-white/70 p-5">
-              <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">
-                Word #{currentIndex + 1}
-              </p>
-              <h2 className="text-3xl font-semibold text-[#0f4c5c]">{currentWord.word}</h2>
-              <p className="text-sm text-slate-600">{currentWord.context || "No context available."}</p>
-            </div>
-
-            {!showAnswer ? (
-              <button
-                type="button"
-                onClick={() => setShowAnswer(true)}
-                className="w-full rounded-2xl bg-[#0f4c5c] px-5 py-3 text-sm font-semibold text-white transition hover:bg-[#006d77]"
+          <div className="w-full max-w-2xl">
+            {/* 3D Card */}
+            <div className="relative h-[28rem]" style={{ perspective: 1000 }}>
+              <motion.div
+                className="absolute inset-0"
+                animate={{ rotateX: isFlipped ? 180 : 0 }}
+                transition={{ type: "spring", stiffness: 260, damping: 30 }}
+                style={{ transformStyle: "preserve-3d" }}
               >
-                Hien thi dap an
-              </button>
-            ) : (
-              <div className="space-y-5">
-                <div className="rounded-2xl border border-slate-900/10 bg-slate-50 p-5">
-                  <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Vietnamese meaning</p>
-                  <p className="mt-2 text-lg text-slate-800">{currentWord.translation || "-"}</p>
+                {/* Front face */}
+                <div
+                  className="absolute inset-0 flex flex-col items-center justify-center border border-foreground/10 bg-white p-10 text-center"
+                  style={{ backfaceVisibility: "hidden" }}
+                >
+                  <p className="editorial-meta text-accent">
+                    Word #{currentIndex + 1}
+                  </p>
+                  <h2 className="mt-6 font-serif text-5xl">{currentWord.word}</h2>
+                  <p className="mt-6 max-w-md text-sm leading-relaxed text-foreground/45">
+                    {currentWord.context || "No context available."}
+                  </p>
+                  <p className="mt-8 text-xs text-foreground/25">
+                    Tap flip to reveal meaning
+                  </p>
                 </div>
 
-                <div>
-                  <p className="mb-3 text-sm font-medium text-slate-700">Danh gia do nho cua ban (SM-2 quality):</p>
-                  <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                {/* Back face */}
+                <div
+                  className="absolute inset-0 flex flex-col items-center justify-center border border-foreground/10 bg-foreground p-10 text-center text-background"
+                  style={{
+                    backfaceVisibility: "hidden",
+                    transform: "rotateX(180deg)",
+                  }}
+                >
+                  <p className="editorial-meta text-background/50">
+                    Vietnamese meaning
+                  </p>
+                  <h2 className="mt-6 font-serif text-4xl">
+                    {currentWord.translation || "No translation"}
+                  </h2>
+
+                  {/* Quality buttons on back */}
+                  <div className="mt-10 grid w-full max-w-md grid-cols-3 gap-2">
                     {qualityChoices.map((choice) => (
                       <button
                         key={choice.quality}
                         type="button"
                         disabled={isUpdating}
                         onClick={() => void handleQualitySelect(choice.quality)}
-                        className={`rounded-xl border px-3 py-3 text-left text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-60 ${choice.className}`}
+                        className="border border-background/15 px-2 py-2.5 text-xs font-semibold text-background/80 transition hover:bg-background/10 disabled:cursor-not-allowed disabled:opacity-60"
                       >
                         {choice.label} ({choice.quality})
                       </button>
                     ))}
                   </div>
                 </div>
-              </div>
-            )}
+              </motion.div>
+            </div>
+
+            {/* Controls */}
+            <div className="mt-12 flex items-center justify-center gap-6">
+              <button
+                type="button"
+                onClick={goBack}
+                disabled={currentIndex === 0}
+                className="flex h-12 w-12 items-center justify-center rounded-full border border-foreground/10 transition hover:bg-foreground/5 disabled:opacity-30"
+              >
+                <ArrowLeft size={18} />
+              </button>
+              <button
+                type="button"
+                onClick={handleFlip}
+                className="flex h-14 w-14 items-center justify-center rounded-full bg-accent text-white transition hover:bg-[#d04f00]"
+              >
+                <RotateCcw size={20} />
+              </button>
+              <button
+                type="button"
+                onClick={goNext}
+                disabled={currentIndex >= totalCount - 1}
+                className="flex h-12 w-12 items-center justify-center rounded-full border border-foreground/10 transition hover:bg-foreground/5 disabled:opacity-30"
+              >
+                <ArrowRight size={18} />
+              </button>
+            </div>
           </div>
         )}
-      </section>
+      </div>
     </div>
   );
 };

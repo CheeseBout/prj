@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { FormEvent, useState } from "react";
-import { ArrowLeft, BookOpenText, Languages, Lock, LogIn, Mail, Sparkles } from "lucide-react";
+import { Languages, LogIn } from "lucide-react";
 
 import { login } from "@/lib/api";
 
@@ -34,117 +34,129 @@ export const LoginForm = () => {
   };
 
   return (
-    <div className="grid gap-6 lg:grid-cols-[0.96fr_1.04fr]">
-      <section className="panel rounded-3xl p-6 md:p-8">
-        <Link
-          href="/"
-          className="mb-8 inline-flex items-center gap-2 text-sm font-semibold text-slate-600 transition hover:text-slate-900"
-        >
-          <ArrowLeft size={16} />
-          Back to landing
+    <div className="flex min-h-screen">
+      {/* ── Left Panel (Branding) ─────────────────────────────── */}
+      <div className="hidden flex-1 flex-col justify-between border-r border-foreground/10 bg-white p-12 lg:flex">
+        {/* Grid pattern overlay */}
+        <div
+          className="pointer-events-none absolute inset-0 opacity-[0.04]"
+          style={{
+            backgroundImage:
+              "radial-gradient(circle, #1A1A1A 1px, transparent 1px)",
+            backgroundSize: "24px 24px",
+          }}
+        />
+
+        <Link href="/" className="relative z-10">
+          <span className="font-serif text-xl font-bold tracking-tight">
+            Lexi<span className="text-accent">Bridge</span>
+          </span>
         </Link>
 
-        <div className="mb-8">
-          <span className="inline-flex items-center gap-2 rounded-full border border-slate-900/10 bg-white px-3 py-1 text-xs font-semibold uppercase tracking-[0.14em] text-[#0f4c5c]">
-            <Sparkles size={13} />
-            Welcome back
-          </span>
-          <h1 className="mt-4 text-4xl">Sign in</h1>
-          <p className="mt-2 text-sm text-slate-600">
-            Continue your bilingual vocabulary journey.
+        <div className="relative z-10 border-l-2 border-foreground/15 pl-8">
+          <h1 className="font-serif text-5xl leading-[1.1]">
+            Read smarter with
+            <br />
+            <em className="italic text-accent">contextual</em> guidance.
+          </h1>
+          <p className="mt-6 max-w-md text-sm leading-relaxed text-foreground/50">
+            Sign in to access your personalized vocabulary hub, spaced
+            repetition practice, and bilingual learning dashboard.
           </p>
         </div>
 
-        <form className="space-y-5" onSubmit={handleSubmit}>
-          <div>
-            <label className="mb-2 block text-sm font-semibold text-slate-700" htmlFor="email">
-              Email
-            </label>
-            <div className="relative">
-              <Mail className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+        <p className="relative z-10 text-xs text-foreground/30">
+          EN-VI Contextual Learning Platform
+        </p>
+      </div>
+
+      {/* ── Right Panel (Form) ────────────────────────────────── */}
+      <div className="relative flex flex-1 flex-col items-center justify-center px-6 py-12">
+        {/* Mobile logo */}
+        <Link href="/" className="absolute left-8 top-8 lg:hidden">
+          <span className="font-serif text-lg font-bold">
+            Lexi<span className="text-accent">Bridge</span>
+          </span>
+        </Link>
+
+        <div className="w-full max-w-sm">
+          <p className="editorial-meta text-accent">Welcome back</p>
+          <h2 className="mt-3 font-serif text-4xl">
+            Sign <em className="italic">in.</em>
+          </h2>
+          <p className="mt-2 text-sm text-foreground/50">
+            Continue your bilingual vocabulary journey.
+          </p>
+
+          <form className="mt-10 space-y-6" onSubmit={handleSubmit}>
+            <div>
+              <label
+                className="editorial-meta mb-3 block text-foreground/60"
+                htmlFor="login-email"
+              >
+                Email
+              </label>
               <input
-                id="email"
+                id="login-email"
                 name="email"
                 type="email"
                 required
                 value={email}
                 onChange={(event) => setEmail(event.target.value)}
-                className="w-full rounded-2xl border border-slate-900/15 bg-white px-10 py-3 text-sm outline-none transition focus:border-[#0f4c5c] focus:ring-4 focus:ring-[#006d77]/15"
+                className="w-full border-b border-foreground/15 bg-transparent pb-3 text-sm outline-none transition focus:border-accent"
                 placeholder="you@example.com"
               />
             </div>
-          </div>
 
-          <div>
-            <label className="mb-2 block text-sm font-semibold text-slate-700" htmlFor="password">
-              Password
-            </label>
-            <div className="relative">
-              <Lock className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+            <div>
+              <label
+                className="editorial-meta mb-3 block text-foreground/60"
+                htmlFor="login-password"
+              >
+                Password
+              </label>
               <input
-                id="password"
+                id="login-password"
                 name="password"
                 type="password"
                 required
                 value={password}
                 onChange={(event) => setPassword(event.target.value)}
-                className="w-full rounded-2xl border border-slate-900/15 bg-white px-10 py-3 text-sm outline-none transition focus:border-[#0f4c5c] focus:ring-4 focus:ring-[#006d77]/15"
+                className="w-full border-b border-foreground/15 bg-transparent pb-3 text-sm outline-none transition focus:border-accent"
                 placeholder="Enter your password"
               />
             </div>
-          </div>
 
-          {error && (
-            <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-              {error}
-            </div>
-          )}
+            {error && (
+              <div className="border-l-2 border-red-400 bg-red-50 px-4 py-3 text-sm text-red-700">
+                {error}
+              </div>
+            )}
 
-          <button
-            type="submit"
-            disabled={isSubmitting}
-            className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-[#0f4c5c] px-4 py-3 text-sm font-semibold text-white transition hover:bg-[#006d77] disabled:cursor-not-allowed disabled:opacity-60"
-          >
-            {isSubmitting ? "Signing in..." : "Sign in"}
-            <LogIn size={16} />
-          </button>
-        </form>
+            <button
+              type="submit"
+              disabled={isSubmitting}
+              className="group inline-flex w-full items-center justify-center gap-2 bg-foreground px-4 py-3.5 text-sm font-semibold text-background transition hover:bg-foreground/85 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {isSubmitting ? "Signing in..." : "Sign in"}
+              <LogIn
+                size={15}
+                className="transition group-hover:translate-x-0.5"
+              />
+            </button>
+          </form>
 
-        <p className="mt-6 text-sm text-slate-600">
-          New here?{" "}
-          <Link href="/register" className="font-semibold text-[#0f4c5c] hover:underline">
-            Create an account
-          </Link>
-        </p>
-      </section>
-
-      <section className="panel hidden rounded-3xl p-8 lg:block">
-        <p className="text-xs font-semibold uppercase tracking-[0.15em] text-slate-500">Inside LexiBridge</p>
-        <h2 className="mt-3 text-4xl leading-tight">
-          Read smarter with contextual English-Vietnamese guidance.
-        </h2>
-
-        <div className="mt-8 space-y-4">
-          <article className="rounded-2xl border border-slate-900/10 bg-white/70 p-4">
-            <p className="flex items-center gap-2 text-sm font-semibold text-slate-800">
-              <Languages size={16} className="text-[#0f4c5c]" />
-              Bilingual explanations
-            </p>
-            <p className="mt-2 text-sm text-slate-600">
-              View concise English and Vietnamese explanations side by side.
-            </p>
-          </article>
-          <article className="rounded-2xl border border-slate-900/10 bg-white/70 p-4">
-            <p className="flex items-center gap-2 text-sm font-semibold text-slate-800">
-              <BookOpenText size={16} className="text-[#ff7f50]" />
-              Vocabulary hub
-            </p>
-            <p className="mt-2 text-sm text-slate-600">
-              Save terms with source context and review them by status.
-            </p>
-          </article>
+          <p className="mt-8 text-sm text-foreground/50">
+            New here?{" "}
+            <Link
+              href="/register"
+              className="font-semibold text-foreground underline decoration-foreground/20 underline-offset-4 transition hover:decoration-accent"
+            >
+              Create an account
+            </Link>
+          </p>
         </div>
-      </section>
+      </div>
     </div>
   );
 };

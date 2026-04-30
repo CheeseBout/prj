@@ -1,17 +1,17 @@
 import type { Metadata } from "next";
 
 import { DashboardLayoutShell } from "@/components/layout/dashboard-layout";
-import { VocabClient } from "@/components/vocab/vocab-client";
+import { ProfileClient } from "@/components/profile/profile-client";
 
 export const metadata: Metadata = {
-  title: "Vocabulary Hub | LexiBridge",
-  description: "Search and filter saved contextual vocabulary",
+  title: "Profile | LexiBridge",
+  description: "Manage your account and learning settings",
 };
 
-export default function VocabPage() {
+export default function ProfilePage() {
   return (
     <DashboardLayoutShell>
-      <VocabClient />
+      <ProfileClient />
     </DashboardLayoutShell>
   );
 }

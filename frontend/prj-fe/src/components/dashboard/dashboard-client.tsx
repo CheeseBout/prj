@@ -4,15 +4,29 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
-  Award,
+  ArrowRight,
   BookOpenCheck,
-  BrainCircuit,
-  CalendarClock,
-  Languages,
-  LogOut,
+  Flame,
+  TrendingUp,
 } from "lucide-react";
+import {
+  AreaChart,
+  Area,
+  XAxis,
+  YAxis,
+  Tooltip,
+  ResponsiveContainer,
+  CartesianGrid,
+} from "recharts";
 
-import { getMe, getVocabList, getVocabStats, logout, UserResponse, VocabItem, VocabStats } from "@/lib/api";
+import {
+  getMe,
+  getVocabList,
+  getVocabStats,
+  UserResponse,
+  VocabItem,
+  VocabStats,
+} from "@/lib/api";
 
 const MAX_SCAN_ITEMS = 2000;
 const PAGE_LIMIT = 200;
@@ -24,7 +38,8 @@ const toDateKey = (date: Date) => {
   return `${y}-${m}-${d}`;
 };
 
-const startOfDay = (date: Date) => new Date(date.getFullYear(), date.getMonth(), date.getDate());
+const startOfDay = (date: Date) =>
+  new Date(date.getFullYear(), date.getMonth(), date.getDate());
 
 const parseDateKey = (value?: string | null) => {
   if (!value) return null;
@@ -69,7 +84,7 @@ export const DashboardClient = () => {
       for (let page = 2; page <= totalPages; page += 1) {
         if (combined.length >= MAX_SCAN_ITEMS) {
           setPartialDataNote(
-            `Dang hien thi ${MAX_SCAN_ITEMS} tu dau tien de tinh metric nhanh va on dinh.`
+            `Showing metrics for the first ${MAX_SCAN_ITEMS} words for performance.`
           );
           break;
         }
@@ -92,21 +107,16 @@ export const DashboardClient = () => {
     return () => clearTimeout(timer);
   }, [loadHubData]);
 
-  const handleLogout = async () => {
-    try {
-      await logout();
-    } finally {
-      router.replace("/login");
-    }
-  };
-
   const metrics = useMemo(() => {
     const now = new Date();
     const todayStart = startOfDay(now);
 
-    const reviewedPool = (stats?.data.learning ?? 0) + (stats?.data.mastered ?? 0);
+    const reviewedPool =
+      (stats?.data.learning ?? 0) + (stats?.data.mastered ?? 0);
     const retentionRate =
-      reviewedPool > 0 ? Math.round(((stats?.data.mastered ?? 0) / reviewedPool) * 100) : 0;
+      reviewedPool > 0
+        ? Math.round(((stats?.data.mastered ?? 0) / reviewedPool) * 100)
+        : 0;
 
     const dueToday = vocabItems.filter((item) => {
       if (item.status === "unseen") return false;
@@ -135,8 +145,6 @@ export const DashboardClient = () => {
       bucket.count = scheduleCountByDay.get(bucket.dateKey) ?? 0;
     }
 
-    const maxForecast = Math.max(...forecastBuckets.map((bucket) => bucket.count), 1);
-
     const recentWords = [...vocabItems]
       .sort((a, b) => {
         const dateA = safeDate(a.next_review_date)?.getTime() ?? 0;
@@ -149,207 +157,218 @@ export const DashboardClient = () => {
       dueToday,
       retentionRate,
       forecastBuckets,
-      maxForecast,
       recentWords,
     };
   }, [stats, vocabItems]);
 
   if (loading) {
     return (
-      <div className="panel rounded-3xl p-8 text-center text-sm text-slate-600">
-        Dang tai Learning Hub...
+      <div className="flex h-64 items-center justify-center">
+        <p className="editorial-meta animate-pulse">Loading Learning Hub...</p>
       </div>
     );
   }
 
-  return (
-    <div className="space-y-5">
-      <header className="panel rounded-3xl p-5 md:p-6">
-        <div className="flex flex-wrap items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-[#0f4c5c] text-white">
-              <Languages size={20} />
-            </span>
-            <div>
-              <h1 className="text-3xl">Learning Hub</h1>
-              <p className="text-sm text-slate-600">
-                Xin chao {profile?.full_name || "ban"}, day la trung tam hoc tap hom nay.
-              </p>
-            </div>
-          </div>
+  const statCards = [
+    {
+      label: "Saved words",
+      value: stats?.data.total_words ?? 0,
+      color: "#1A1A1A",
+    },
+    {
+      label: "Learning",
+      value: stats?.data.learning ?? 0,
+      color: "#E85D04",
+    },
+    {
+      label: "Mastered",
+      value: stats?.data.mastered ?? 0,
+      color: "#1A1A1A",
+    },
+    {
+      label: "Unseen",
+      value: stats?.data.unseen ?? 0,
+      color: "#999",
+    },
+  ];
 
-          <div className="flex flex-wrap items-center gap-2">
-            <Link
-              href="/vocab"
-              className="inline-flex items-center gap-2 rounded-xl border border-slate-900/15 bg-white px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
-            >
-              <BookOpenCheck size={16} />
-              Vocabulary Hub
-            </Link>
-            <Link
-              href="/practice"
-              className="inline-flex items-center gap-2 rounded-xl border border-slate-900/15 bg-white px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
-            >
-              <BrainCircuit size={16} />
-              Practice Room
-            </Link>
-            <button
-              type="button"
-              onClick={handleLogout}
-              className="inline-flex items-center gap-2 rounded-xl bg-slate-900 px-3 py-2 text-sm font-semibold text-white transition hover:bg-slate-700"
-            >
-              <LogOut size={16} />
-              Logout
-            </button>
+  const statusColor: Record<string, string> = {
+    unseen: "#999",
+    learning: "#E85D04",
+    mastered: "#1A1A1A",
+  };
+
+  return (
+    <div className="space-y-8">
+      {/* ── Tầng 1: Header ──────────────────────────────────────── */}
+      <header className="flex flex-col gap-4 border-b border-foreground/10 pb-8 md:flex-row md:items-end md:justify-between">
+        <div>
+          <p className="editorial-meta">Overview</p>
+          <h1 className="mt-2 font-serif text-4xl md:text-5xl">
+            Learning <em className="italic">Hub.</em>
+          </h1>
+          <p className="mt-2 text-sm text-foreground/50">
+            Welcome back, {profile?.full_name || "learner"}.
+          </p>
+        </div>
+        <div className="flex items-center gap-4">
+          {/* Streak badge */}
+          <div className="flex items-center gap-2 rounded-full border border-foreground/10 px-4 py-2">
+            <Flame size={16} className="text-accent" />
+            <span className="text-sm font-bold">{stats?.data.streak ?? 0}</span>
+            <span className="text-xs text-foreground/40">day streak</span>
           </div>
         </div>
       </header>
 
-      {/* ĐÃ ĐIỀU CHỈNH GRID THÀNH 4 CỘT TRÊN MÀN HÌNH LỚN ĐỂ CHỨA THẺ STREAK */}
-      <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <article className="panel rounded-3xl p-5">
-          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Saved words</p>
-          <p className="mt-2 text-4xl">{stats?.data.total_words ?? 0}</p>
-        </article>
-        <article className="panel rounded-3xl p-5">
-          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Learning</p>
-          <p className="mt-2 text-4xl text-[#006d77]">{stats?.data.learning ?? 0}</p>
-        </article>
-        <article className="panel rounded-3xl p-5">
-          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Mastered</p>
-          <p className="mt-2 text-4xl text-[#ff7f50]">{stats?.data.mastered ?? 0}</p>
-        </article>
-        {/* THÊM THẺ HIỂN THỊ STREAK VÀO ĐÂY */}
-        <article className="panel rounded-3xl p-5 border border-orange-100 bg-orange-50/40">
-          <div className="flex items-center justify-between">
-            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-orange-600">Streak</p>
-            <span className="text-xl">🔥</span>
-          </div>
-          <p className="mt-2 text-4xl font-bold text-orange-600">{stats?.data.streak ?? 0}</p>
-          <p className="mt-2 text-xs font-medium text-orange-500">
-            {(stats?.data.streak ?? 0) > 0 ? "Giữ vững phong độ nhé!" : "Học ngay để bắt đầu chuỗi!"}
-          </p>
-        </article>
-      </section>
-
-      <section className="grid gap-5 xl:grid-cols-[1.55fr_0.95fr]">
-        <div className="space-y-5">
-          <article className="panel rounded-3xl p-5 md:p-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">
-                  Review forecast
-                </p>
-                <h2 className="mt-1 text-2xl">So tu den han trong 7 ngay toi</h2>
-              </div>
-              <CalendarClock className="text-[#0f4c5c]" size={20} />
-            </div>
-
-            <div className="mt-6 grid grid-cols-7 items-end gap-3">
-              {metrics.forecastBuckets.map((bucket) => {
-                const height = Math.max((bucket.count / metrics.maxForecast) * 100, 6);
-                return (
-                  <div key={bucket.dateKey} className="text-center">
-                    <div className="mx-auto flex h-36 w-full items-end justify-center rounded-xl bg-slate-100/70 px-1 pb-1">
-                      <div
-                        className="w-full rounded-md bg-[#0f4c5c] transition-all"
-                        style={{ height: `${height}%` }}
-                        title={`${bucket.count} words`}
-                      />
-                    </div>
-                    <p className="mt-2 text-xs font-semibold text-slate-600">{bucket.dayLabel}</p>
-                    <p className="text-xs text-slate-500">{bucket.count}</p>
-                  </div>
-                );
-              })}
-            </div>
-          </article>
-        </div>
-
-        <div className="space-y-5">
-          <article className="panel rounded-3xl p-5 md:p-6">
-            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">
-              Nhiem vu hom nay
-            </p>
-            <h2 className="mt-1 text-2xl">Call-to-Action Metrics</h2>
-
-            <div className="mt-5 rounded-2xl bg-[#0f4c5c] p-5 text-white">
-              <p className="text-sm text-white/80">Due for review</p>
-              <p className="mt-2 text-5xl font-semibold">{metrics.dueToday}</p>
-              <p className="mt-1 text-sm text-white/80">tu can on ngay hom nay</p>
-            </div>
-
-            <div className="mt-4 rounded-2xl border border-slate-900/10 bg-white/70 p-4">
-              <p className="text-sm font-semibold text-slate-700">Retention rate</p>
-              <p className="mt-2 text-3xl font-semibold text-[#0f4c5c]">{metrics.retentionRate}%</p>
-              <p className="mt-1 text-xs text-slate-500">
-                Uoc tinh theo ty le mastered tren tong hoc (learning + mastered).
-              </p>
-            </div>
-
-            <Link
-              href="/practice"
-              className="mt-5 inline-flex w-full items-center justify-center rounded-2xl bg-[#ff7f50] px-5 py-3 text-sm font-semibold text-white transition hover:bg-[#f59a74]"
+      {/* ── Tầng 2: Stats ───────────────────────────────────────── */}
+      <section className="grid grid-cols-2 gap-6 md:grid-cols-4">
+        {statCards.map((card) => (
+          <article key={card.label} className="border-t-2 border-foreground/15 pt-4">
+            <p className="editorial-meta">{card.label}</p>
+            <p
+              className="mt-2 font-serif text-4xl"
+              style={{ color: card.color }}
             >
-              Vao phong tap ngay
-            </Link>
-          </article>
-        </div>
-      </section>
-
-      <section className="panel rounded-3xl p-5 md:p-6">
-        <div className="flex items-center justify-between">
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">
-              Recently added
+              {card.value}
             </p>
-            <h2 className="mt-1 text-2xl">5 tu vua duoc luu gan day</h2>
+          </article>
+        ))}
+      </section>
+
+      {/* ── Tầng 3: Chart ───────────────────────────────────────── */}
+      <section className="border border-foreground/10 p-8">
+        <div className="flex items-end justify-between">
+          <div>
+            <p className="editorial-meta">Review forecast</p>
+            <h2 className="mt-2 font-serif text-2xl">
+              Words due in the next 7 days
+            </h2>
           </div>
-          <Award className="text-[#0f4c5c]" size={18} />
+          <TrendingUp size={18} className="text-foreground/30" />
         </div>
 
-        {partialDataNote && (
-          <p className="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700">
-            {partialDataNote}
-          </p>
-        )}
-
-        <div className="mt-5 overflow-x-auto rounded-2xl border border-slate-900/10">
-          <table className="w-full min-w-[780px] text-left text-sm">
-            <thead className="bg-slate-100/70 text-slate-800">
-              <tr>
-                <th className="px-4 py-3 font-semibold">Word</th>
-                <th className="px-4 py-3 font-semibold">Vietnamese</th>
-                <th className="px-4 py-3 font-semibold">Context</th>
-                <th className="px-4 py-3 font-semibold">Status</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-900/10 bg-white/75">
-              {metrics.recentWords.length === 0 && (
-                <tr>
-                  <td colSpan={4} className="px-4 py-8 text-center text-slate-500">
-                    Chua co tu du lieu de hien thi.
-                  </td>
-                </tr>
-              )}
-              {metrics.recentWords.map((item, index) => (
-                <tr key={`${item.word}-${index}`} className="align-top">
-                  <td className="px-4 py-3 font-semibold text-[#0f4c5c]">{item.word}</td>
-                  <td className="px-4 py-3 text-slate-700">{item.translation || "-"}</td>
-                  <td className="max-w-xl px-4 py-3 text-slate-600">
-                    <p className="line-clamp-2">{item.context || "-"}</p>
-                  </td>
-                  <td className="px-4 py-3">
-                    <span className="inline-flex rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700">
-                      {item.status}
-                    </span>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+        <div className="mt-8 h-64">
+          <ResponsiveContainer width="100%" height="100%">
+            <AreaChart data={metrics.forecastBuckets}>
+              <defs>
+                <linearGradient id="colorCount" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%" stopColor="#E85D04" stopOpacity={0.15} />
+                  <stop offset="95%" stopColor="#E85D04" stopOpacity={0} />
+                </linearGradient>
+              </defs>
+              <CartesianGrid
+                strokeDasharray="3 3"
+                stroke="rgba(26,26,26,0.06)"
+                vertical={false}
+              />
+              <XAxis
+                dataKey="dayLabel"
+                axisLine={false}
+                tickLine={false}
+                tick={{ fontSize: 11, fill: "#999" }}
+              />
+              <YAxis
+                axisLine={false}
+                tickLine={false}
+                tick={{ fontSize: 11, fill: "#999" }}
+                allowDecimals={false}
+              />
+              <Tooltip
+                contentStyle={{
+                  backgroundColor: "#1A1A1A",
+                  border: "none",
+                  borderRadius: 0,
+                  color: "#FAF9F6",
+                  fontSize: 12,
+                }}
+                itemStyle={{ color: "#FAF9F6" }}
+              />
+              <Area
+                type="monotone"
+                dataKey="count"
+                stroke="#E85D04"
+                strokeWidth={2}
+                fill="url(#colorCount)"
+                name="Words"
+              />
+            </AreaChart>
+          </ResponsiveContainer>
         </div>
       </section>
+
+      {/* ── Tầng 4: Practice CTA + Recent Words ─────────────────── */}
+      <section className="grid gap-6 md:grid-cols-3">
+        {/* Practice CTA - 2 columns */}
+        <article className="flex flex-col justify-between border border-foreground/10 p-8 md:col-span-2">
+          <div>
+            <p className="editorial-meta">Today&apos;s mission</p>
+            <h2 className="mt-3 font-serif text-3xl">
+              <span className="text-accent">{metrics.dueToday}</span> words due
+              for review
+            </h2>
+            <p className="mt-3 text-sm text-foreground/50">
+              Retention rate:{" "}
+              <span className="font-semibold text-foreground">
+                {metrics.retentionRate}%
+              </span>{" "}
+              (mastered / reviewed pool)
+            </p>
+          </div>
+          <Link
+            href="/practice"
+            className="group mt-8 inline-flex items-center gap-2 self-start bg-accent px-6 py-3 text-sm font-semibold text-white transition hover:bg-[#d04f00]"
+          >
+            Enter practice room
+            <ArrowRight
+              size={15}
+              className="transition group-hover:translate-x-1"
+            />
+          </Link>
+        </article>
+
+        {/* Recent Words - 1 column */}
+        <article className="border border-foreground/10 p-8">
+          <p className="editorial-meta">Recently saved</p>
+          <div className="mt-6 space-y-4">
+            {metrics.recentWords.length === 0 && (
+              <p className="text-sm text-foreground/40">No words yet.</p>
+            )}
+            {metrics.recentWords.map((item, index) => (
+              <div
+                key={`${item.word}-${index}`}
+                className="flex items-center gap-3"
+              >
+                <span
+                  className="h-2 w-2 shrink-0 rounded-full"
+                  style={{
+                    backgroundColor: statusColor[item.status] ?? "#999",
+                  }}
+                />
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-semibold">{item.word}</p>
+                  <p className="truncate text-xs text-foreground/40">
+                    {item.translation || "No translation"}
+                  </p>
+                </div>
+              </div>
+            ))}
+          </div>
+          <Link
+            href="/vocab"
+            className="mt-6 inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-widest text-foreground/50 transition hover:text-foreground"
+          >
+            <BookOpenCheck size={14} />
+            View all
+          </Link>
+        </article>
+      </section>
+
+      {partialDataNote && (
+        <p className="border-l-2 border-amber-400 bg-amber-50 px-4 py-3 text-xs text-amber-700">
+          {partialDataNote}
+        </p>
+      )}
     </div>
   );
 };
