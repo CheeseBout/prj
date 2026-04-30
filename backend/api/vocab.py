@@ -1,3 +1,4 @@
+import random
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.future import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -119,8 +120,40 @@ async def get_vocab_list(
         "limit": limit
     }
 
+@router.get("/practice/specializations")
+async def get_practice_specializations(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Trả về danh sách chuyên ngành + số từ đến hạn ôn tập cho mỗi chuyên ngành."""
+    now = datetime.datetime.utcnow()
+
+    query = select(
+        UserVocabProgress.specialization,
+        func.count(UserVocabProgress.vocab_id).label("due_count"),
+    ).where(
+        UserVocabProgress.user_id == current_user.user_id,
+        UserVocabProgress.next_review_date <= now,
+        UserVocabProgress.specialization.isnot(None),
+    ).group_by(UserVocabProgress.specialization)
+
+    res = await db.execute(query)
+
+    items = []
+    total_due = 0
+    for row in res:
+        items.append({
+            "specialization": row.specialization,
+            "due_count": row.due_count,
+        })
+        total_due += row.due_count
+
+    return {"status": "success", "total_due": total_due, "data": items}
+
+
 @router.get("/practice")
 async def get_practice_list(
+    specialization: Optional[str] = None,
     db: AsyncSession = Depends(get_db), 
     current_user: User = Depends(get_current_user)
 ):
@@ -129,6 +162,8 @@ async def get_practice_list(
         Vocabulary.word,
         UserVocabProgress.context,
         UserVocabProgress.translation,
+        UserVocabProgress.en_explanation,
+        UserVocabProgress.vi_explanation,
         UserVocabProgress.specialization,
         UserVocabProgress.difficulty,
         UserVocabProgress.status,
@@ -138,7 +173,12 @@ async def get_practice_list(
     ).where(
         UserVocabProgress.user_id == current_user.user_id,
         UserVocabProgress.next_review_date <= now,
-    ).order_by(UserVocabProgress.next_review_date.asc()).limit(30) 
+    )
+
+    if specialization and specialization != "all":
+        query = query.where(UserVocabProgress.specialization == specialization)
+
+    query = query.order_by(UserVocabProgress.next_review_date.asc()).limit(30)
     
     res = await db.execute(query)
     
@@ -148,6 +188,8 @@ async def get_practice_list(
             "word": row.word,
             "context": row.context,
             "translation": row.translation,
+            "en_explanation": row.en_explanation,
+            "vi_explanation": row.vi_explanation,
             "specialization": row.specialization,
             "difficulty": row.difficulty,
             "status": row.status,
@@ -158,3 +200,97 @@ async def get_practice_list(
         "status": "success",
         "data": items
     }
+
+
+@router.get("/quiz")
+async def get_quiz(
+    specialization: Optional[str] = None,
+    count: int = 10,
+    quiz_type: str = "en_to_vi",
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Tạo bộ câu hỏi quiz trắc nghiệm từ các từ đến hạn ôn tập.
+    quiz_type: 'en_to_vi' (cho từ EN → chọn dịch VI) hoặc 'vi_to_en' (cho nghĩa VI → chọn từ EN)
+    """
+    now = datetime.datetime.utcnow()
+
+    # 1) Lấy các từ đến hạn ôn tập
+    due_query = select(
+        Vocabulary.word,
+        UserVocabProgress.context,
+        UserVocabProgress.translation,
+        UserVocabProgress.en_explanation,
+        UserVocabProgress.vi_explanation,
+        UserVocabProgress.specialization,
+        UserVocabProgress.difficulty,
+    ).join(
+        Vocabulary, UserVocabProgress.vocab_id == Vocabulary.id
+    ).where(
+        UserVocabProgress.user_id == current_user.user_id,
+        UserVocabProgress.next_review_date <= now,
+        UserVocabProgress.translation.isnot(None),
+    )
+
+    if specialization and specialization != "all":
+        due_query = due_query.where(UserVocabProgress.specialization == specialization)
+
+    due_result = await db.execute(due_query)
+    due_rows = [dict(row._mapping) for row in due_result]
+    random.shuffle(due_rows)
+    due_rows = due_rows[:count]
+
+    if not due_rows:
+        return {"status": "success", "data": []}
+
+    # 2) Lấy tất cả từ của user (để làm đáp án nhiễu)
+    all_query = select(
+        Vocabulary.word,
+        UserVocabProgress.translation,
+    ).join(
+        Vocabulary, UserVocabProgress.vocab_id == Vocabulary.id
+    ).where(
+        UserVocabProgress.user_id == current_user.user_id,
+        UserVocabProgress.translation.isnot(None),
+    )
+    all_result = await db.execute(all_query)
+    all_pairs = [(r.word, r.translation) for r in all_result]
+
+    # 3) Tạo câu hỏi
+    questions = []
+    for dw in due_rows:
+        word = dw["word"]
+        translation = dw["translation"]
+        if not translation:
+            continue
+
+        if quiz_type == "en_to_vi":
+            correct = translation
+            pool = [t for w, t in all_pairs if w != word and t and t != translation]
+        else:
+            correct = word
+            pool = [w for w, t in all_pairs if w != word]
+
+        if len(pool) < 3:
+            continue
+
+        distractors = random.sample(pool, 3)
+        choices = distractors + [correct]
+        random.shuffle(choices)
+
+        questions.append({
+            "word": word,
+            "context": dw.get("context"),
+            "translation": translation,
+            "en_explanation": dw.get("en_explanation"),
+            "vi_explanation": dw.get("vi_explanation"),
+            "specialization": dw.get("specialization"),
+            "difficulty": dw.get("difficulty"),
+            "correct_answer": correct,
+            "choices": choices,
+            "correct_index": choices.index(correct),
+            "quiz_type": quiz_type,
+        })
+
+    return {"status": "success", "data": questions}

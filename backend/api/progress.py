@@ -31,7 +31,9 @@ async def _save_manual_lookup(
     context: str,
     translation: str | None,
     specialization: str | None, 
-    difficulty: str | None,     
+    difficulty: str | None,
+    en_explanation: str | None = None,
+    vi_explanation: str | None = None,
 ):
     vocab_result = await db.execute(select(Vocabulary).where(Vocabulary.word == word))
     vocab_item = vocab_result.scalar_one_or_none()
@@ -50,6 +52,8 @@ async def _save_manual_lookup(
 
     context_value = _trim_text(context)
     translation_value = _trim_text(translation)
+    en_expl_value = _trim_text(en_explanation, 2000)
+    vi_expl_value = _trim_text(vi_explanation, 2000)
 
     if not progress:
         progress = UserVocabProgress(
@@ -60,6 +64,8 @@ async def _save_manual_lookup(
             translation=translation_value,
             specialization=specialization,
             difficulty=difficulty,
+            en_explanation=en_expl_value,
+            vi_explanation=vi_expl_value,
             next_review_date=datetime.datetime.utcnow(),
         )
         db.add(progress)
@@ -72,6 +78,10 @@ async def _save_manual_lookup(
             progress.specialization = specialization
         if not progress.difficulty and difficulty:
             progress.difficulty = difficulty
+        if not progress.en_explanation and en_expl_value:
+            progress.en_explanation = en_expl_value
+        if not progress.vi_explanation and vi_expl_value:
+            progress.vi_explanation = vi_expl_value
 
     await db.commit()
 
@@ -108,6 +118,8 @@ async def update_progress(
 
     new_specialization = None
     new_difficulty = None
+    new_en_explanation = None
+    new_vi_explanation = None
 
     # Kéo dữ liệu Context/Translation/Specialization/Difficulty từ cache nháp ra
     user_context_key = f"user_context:{current_user.user_id}:{data.word}"
@@ -123,6 +135,8 @@ async def update_progress(
                     
                 new_specialization = ctx_data.get("specialization")
                 new_difficulty = ctx_data.get("difficulty")
+                new_en_explanation = ctx_data.get("en_explanation")
+                new_vi_explanation = ctx_data.get("vi_explanation")
         except Exception:
             pass
 
@@ -138,6 +152,12 @@ async def update_progress(
         
     if new_difficulty and not progress.difficulty:
         progress.difficulty = new_difficulty
+
+    if new_en_explanation and not progress.en_explanation:
+        progress.en_explanation = _trim_text(new_en_explanation, 2000)
+
+    if new_vi_explanation and not progress.vi_explanation:
+        progress.vi_explanation = _trim_text(new_vi_explanation, 2000)
 
     sm2_result = calculate_sm2(
         repetitions=progress.repetitions,
@@ -200,8 +220,10 @@ async def translate_manual(
             word=word,
             context=context,
             translation=payload.get("vietnamese_translation"),
-            specialization=payload.get("specialization"), # THÊM MỚI
-            difficulty=payload.get("difficulty")          # THÊM MỚI
+            specialization=payload.get("specialization"),
+            difficulty=payload.get("difficulty"),
+            en_explanation=payload.get("en_explanation"),
+            vi_explanation=payload.get("vi_explanation"),
         )
         return {**payload, "status": "success"}
 
@@ -220,8 +242,10 @@ async def translate_manual(
             word=word,
             context=context,
             translation=llm_data.get("vietnamese_translation"),
-            specialization=llm_data.get("specialization"), # THÊM MỚI
-            difficulty=llm_data.get("difficulty")          # THÊM MỚI
+            specialization=llm_data.get("specialization"),
+            difficulty=llm_data.get("difficulty"),
+            en_explanation=llm_data.get("en_explanation"),
+            vi_explanation=llm_data.get("vi_explanation"),
         )
         return {**llm_data, "status": "success"}
 

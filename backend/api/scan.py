@@ -123,6 +123,8 @@ async def scan_vocabulary(
                         context_payload = {
                             "context": text,
                             "translation": hl_data.get("vietnamese_translation", ""),
+                            "en_explanation": hl_data.get("en_explanation", ""),
+                            "vi_explanation": hl_data.get("vi_explanation", ""),
                             "specialization": hl_data.get("specialization"),
                             "difficulty": hl_data.get("difficulty"),
                         }

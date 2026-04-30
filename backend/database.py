@@ -47,6 +47,8 @@ class UserVocabProgress(Base):
     next_review_date = Column(DateTime, default=datetime.datetime.utcnow)
     context = Column(String(1000), nullable=True)
     translation = Column(String(1000), nullable=True)
+    en_explanation = Column(String(2000), nullable=True)
+    vi_explanation = Column(String(2000), nullable=True)
 
 async def init_db():
     async with engine.begin() as conn:

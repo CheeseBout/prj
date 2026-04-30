@@ -184,6 +184,8 @@ export interface VocabItem {
   difficulty?: string;
   context?: string;
   translation?: string;
+  en_explanation?: string;
+  vi_explanation?: string;
   next_review_date?: string;
 }
 
@@ -198,6 +200,36 @@ export interface VocabListResponse {
 export interface PracticeListResponse {
   status: string;
   data: VocabItem[];
+}
+
+export interface SpecializationOption {
+  specialization: string;
+  due_count: number;
+}
+
+export interface SpecializationsResponse {
+  status: string;
+  total_due: number;
+  data: SpecializationOption[];
+}
+
+export interface QuizQuestion {
+  word: string;
+  context?: string;
+  translation?: string;
+  en_explanation?: string;
+  vi_explanation?: string;
+  specialization?: string;
+  difficulty?: string;
+  correct_answer: string;
+  choices: string[];
+  correct_index: number;
+  quiz_type: "en_to_vi" | "vi_to_en";
+}
+
+export interface QuizResponse {
+  status: string;
+  data: QuizQuestion[];
 }
 
 export interface ManualTranslatePayload {
@@ -255,8 +287,34 @@ export const getVocabList = async (
   });
 };
 
-export const getPracticeList = async (): Promise<PracticeListResponse> => {
-  return requestJson<PracticeListResponse>("/api/vocab/practice", {
+export const getPracticeSpecializations = async (): Promise<SpecializationsResponse> => {
+  return requestJson<SpecializationsResponse>("/api/vocab/practice/specializations", {
+    method: "GET",
+  });
+};
+
+export const getPracticeList = async (
+  specialization?: string,
+): Promise<PracticeListResponse> => {
+  let query = "";
+  if (specialization && specialization !== "all") {
+    query = `?specialization=${encodeURIComponent(specialization)}`;
+  }
+  return requestJson<PracticeListResponse>(`/api/vocab/practice${query}`, {
+    method: "GET",
+  });
+};
+
+export const getQuiz = async (
+  specialization?: string,
+  count = 10,
+  quizType = "en_to_vi",
+): Promise<QuizResponse> => {
+  let query = `?count=${count}&quiz_type=${quizType}`;
+  if (specialization && specialization !== "all") {
+    query += `&specialization=${encodeURIComponent(specialization)}`;
+  }
+  return requestJson<QuizResponse>(`/api/vocab/quiz${query}`, {
     method: "GET",
   });
 };
