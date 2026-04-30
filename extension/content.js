@@ -604,6 +604,7 @@
     const processedElements = new Set();
     const textNodeCache = new Map();
     let batchTimer = null;
+    let isFlushing = false; // Thêm cờ khóa luồng
 
     const supportsHighlights =
       typeof CSS !== "undefined" &&
@@ -734,18 +735,9 @@
         html_context: getCleanedHTML(element),
       });
 
-      // TỐI ƯU HÓA: Thực thi Dynamic Batching
-      if (queuedElements.size >= CONFIG.MAX_BATCH_SIZE) {
-        if (batchTimer) {
-            clearTimeout(batchTimer);
-            batchTimer = null;
-        }
-        // Gọi hàm quét ngay lập tức khi đủ số lượng
-        flushScanBatch(); 
-      } else {
-        if (batchTimer) clearTimeout(batchTimer);
-        batchTimer = setTimeout(flushScanBatch, CONFIG.BATCH_DELAY_MS);
-      }
+      // Chỉ gom vào map và debounce, không gọi gửi đi lập tức
+      if (batchTimer) clearTimeout(batchTimer);
+      batchTimer = setTimeout(processBatchQueue, CONFIG.BATCH_DELAY_MS);
     }
 
     function applyHighlights(highlightItems) {
@@ -932,55 +924,61 @@
       }
     }
 
-    async function flushScanBatch() {
-      batchTimer = null;
-      if (!queuedElements.size) return;
+    async function processBatchQueue() {
+      if (isFlushing || queuedElements.size === 0) return;
+      isFlushing = true; // Khóa lại, không cho các request khác chạy song song
 
-      const payloadElements = Array.from(queuedElements.values()).map(
-        (entry) => ({
-          element_id: entry.element_id,
-          text_context: entry.text_context,
-          html_context: entry.html_context,
-        }),
-      );
+      while (queuedElements.size > 0) {
+        // Lấy ra đúng số lượng MAX_BATCH_SIZE
+        const batchKeys = Array.from(queuedElements.keys()).slice(0, CONFIG.MAX_BATCH_SIZE);
+        const payloadElements = batchKeys.map((key) => queuedElements.get(key));
 
-      for (const id of queuedElements.keys()) processedElements.add(id);
-      queuedElements.clear();
-
-      try {
-        const response = await chrome.runtime.sendMessage({
-          action: "fetch_api",
-          url: CONFIG.API_URL,
-          options: {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: {
-              url: window.location.href,
-              elements: payloadElements,
-            },
-          },
-        });
-
-        if (response.status !== "success") {
-          if (response.error_type === "UNAUTHORIZED") {
-            console.warn("[LL Scanner] Dừng scan vì chưa đăng nhập (401)");
-            showLoginPrompt();
-            return;
-          }
-          throw new Error(`API returned error: ${response.message}`);
+        // Chuyển các phần tử này sang trạng thái "đã xử lý" và xóa khỏi hàng đợi
+        for (const key of batchKeys) {
+          processedElements.add(key);
+          queuedElements.delete(key);
         }
 
-        const data = response.data;
-        const responseData = Array.isArray(data) ? data : data.highlights || [];
-        const translationData = Array.isArray(data)
-          ? data
-          : data.translations || [];
+        try {
+          const response = await chrome.runtime.sendMessage({
+            action: "fetch_api",
+            url: CONFIG.API_URL,
+            options: {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: {
+                url: window.location.href,
+                elements: payloadElements,
+              },
+            },
+          });
 
-        applyHighlights(responseData);
-        applyTranslations(translationData);
-      } catch (error) {
-        console.warn("[LL Scanner] API unavailable", error);
+          if (response.status !== "success") {
+            if (response.error_type === "UNAUTHORIZED") {
+              console.warn("[LL Scanner] Dừng scan vì chưa đăng nhập (401)");
+              showLoginPrompt();
+              break; // Dừng toàn bộ hàng đợi nếu chưa đăng nhập
+            }
+            console.warn(`API returned error: ${response.message}`);
+            continue; // Lỗi thì bỏ qua mẻ này, chạy mẻ tiếp theo
+          }
+
+          const data = response.data;
+          const responseData = Array.isArray(data) ? data : data.highlights || [];
+          const translationData = Array.isArray(data) ? data : data.translations || [];
+
+          applyHighlights(responseData);
+          applyTranslations(translationData);
+          
+          // Nghỉ 300ms giữa các mẻ để backend "thở", tránh Rate Limit
+          await new Promise(resolve => setTimeout(resolve, 300)); 
+
+        } catch (error) {
+          console.warn("[LL Scanner] API unavailable", error);
+        }
       }
+
+      isFlushing = false; // Mở khóa khi hàng đợi đã cạn
     }
 
     function observeCandidate(element, intersectionObserver) {

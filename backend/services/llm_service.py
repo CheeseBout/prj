@@ -61,20 +61,70 @@ def _normalize_label(value: str | None) -> str | None:
 def _normalize_specialization(value: str | None) -> str | None:
     normalized = _normalize_label(value)
     if not normalized:
-        return None
+        return "academic_research" # Mặc định nếu không xác định được
 
+    # Mapping các chuyên ngành ngách về Broad Categories
     alias_map = {
-        "cs": "computer_science",
-        "comp_sci": "computer_science",
-        "machine_learning": "artificial_intelligence",
-        "ml": "artificial_intelligence",
-        "ai": "artificial_intelligence",
-        "nlp": "artificial_intelligence",
-        "biomedicine": "biomedical",
-        "medical": "medicine",
-        "healthcare": "medicine",
+        # 1. AI & Computer Science
+        "computer_science": "ai_computer_science",
+        "cs": "ai_computer_science",
+        "comp_sci": "ai_computer_science",
+        "artificial_intelligence": "ai_computer_science",
+        "ai": "ai_computer_science",
+        "machine_learning": "ai_computer_science",
+        "ml": "ai_computer_science",
+        "deep_learning": "ai_computer_science",
+        "nlp": "ai_computer_science",
+        "machine_translation": "ai_computer_science",
+        "neural_networks": "ai_computer_science",
+        "llm": "ai_computer_science",
+        "software_engineering": "ai_computer_science",
+
+        # 2. Economics & Business
+        "economics": "economics_business",
+        "business": "economics_business",
+        "finance": "economics_business",
+        "marketing": "economics_business",
+        "accounting": "economics_business",
+        "statistical_forecasting": "economics_business",
+        "forecasting": "economics_business",
+
+        # 3. Healthcare & Medicine
+        "medicine": "healthcare_medicine",
+        "medical": "healthcare_medicine",
+        "healthcare": "healthcare_medicine",
+        "biomedicine": "healthcare_medicine",
+        "biomedical": "healthcare_medicine",
+        "anatomy": "healthcare_medicine",
+        "pharmacy": "healthcare_medicine",
+
+        # 4. Math & Data Science
+        "mathematics": "math_data_science",
+        "math": "math_data_science",
+        "optimization": "math_data_science",
+        "statistics": "math_data_science",
+        "data_science": "math_data_science",
+
+        # 5. Science & Engineering
+        "engineering": "science_engineering",
+        "physics": "science_engineering",
+        "chemistry": "science_engineering",
+        "natural_science": "science_engineering",
+
+        # 6. Social Sciences & Humanities
+        "psychology": "social_sciences",
+        "law": "social_sciences",
+        "linguistics": "social_sciences",
+        "history": "social_sciences",
+
+        # 7. Academic & Research (Bao gồm các phương pháp luận chung)
+        "academic": "academic_research",
+        "research": "academic_research",
+        "research_methodology": "academic_research",
+        "general": "academic_research"
     }
-    return alias_map.get(normalized, normalized)
+    
+    return alias_map.get(normalized, "academic_research") # Fallback về academic_research nếu có từ lạ
 
 
 def _normalize_difficulty(value: str | None) -> str | None:
