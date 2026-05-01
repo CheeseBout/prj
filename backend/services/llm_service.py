@@ -216,7 +216,7 @@ async def translate_elements_inline(elements: list[ScanElement]) -> list[dict]:
         return []
 
     items = "\n".join(
-        f"[{i}] {el.html_context if el.html_context else el.text_context}"
+        f"[ID_{i}] {el.html_context if el.html_context else el.text_context}"
         for i, el in enumerate(elements)
     )
 
@@ -242,8 +242,12 @@ async def translate_elements_inline(elements: list[ScanElement]) -> list[dict]:
             translations = data.get("translations", [])
             result = []
             for item in translations:
-                if isinstance(item, dict) and "index" in item and "translation" in item:
-                    result.append({"index": item["index"], "translation": item["translation"]})
+                if isinstance(item, dict) and "id" in item and "translation" in item:
+                    try:
+                        idx = int(str(item["id"]).replace("ID_", ""))
+                        result.append({"index": idx, "translation": item["translation"]})
+                    except ValueError:
+                        pass
             return result
         except Exception as e:
             print(f"LLM Error (Inline) Attempt {attempt+1}: {e}")

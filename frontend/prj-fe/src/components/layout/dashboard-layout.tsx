@@ -9,7 +9,6 @@ import {
   BrainCircuit,
   LogOut,
   UserRound,
-  ArrowRight,
   Layers,
   ChevronRight,
   ChevronDown,
