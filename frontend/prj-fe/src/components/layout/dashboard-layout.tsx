@@ -2,20 +2,25 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { ReactNode } from "react";
+import React, { ReactNode } from "react";
 import {
   BarChart3,
   BookOpenCheck,
   BrainCircuit,
   LogOut,
   UserRound,
+  ArrowRight,
+  Layers,
 } from "lucide-react";
 
 import { logout } from "@/lib/api";
 
+import { getTags, TagOption } from "@/lib/api";
+
 const navItems = [
   { href: "/dashboard", label: "Overview", icon: BarChart3 },
   { href: "/vocab", label: "Vocabulary", icon: BookOpenCheck },
+  { href: "/collections", label: "Collections", icon: Layers },
   { href: "/practice", label: "Practice", icon: BrainCircuit },
   { href: "/profile", label: "Profile", icon: UserRound },
 ];
@@ -29,6 +34,21 @@ export const DashboardLayoutShell = ({
 }: DashboardLayoutShellProps) => {
   const pathname = usePathname();
   const router = useRouter();
+  const [topTags, setTopTags] = React.useState<TagOption[]>([]);
+
+  React.useEffect(() => {
+    getTags()
+      .then((res) => {
+        if (res.data) {
+          // Sort by word_count descending and take top 5
+          const sorted = [...res.data].sort((a, b) => b.word_count - a.word_count).slice(0, 5);
+          setTopTags(sorted);
+        }
+      })
+      .catch(() => {
+        // ignore
+      });
+  }, []);
 
   const handleLogout = async () => {
     try {
@@ -55,25 +75,46 @@ export const DashboardLayoutShell = ({
             const Icon = item.icon;
             const isActive = pathname === item.href;
             return (
-              <Link
-                key={item.href}
-                href={item.href}
-                className={`group flex items-center gap-3 rounded-sm px-4 py-3 text-sm font-medium transition ${
-                  isActive
-                    ? "bg-foreground text-background"
-                    : "text-foreground/55 hover:bg-foreground/5 hover:text-foreground"
-                }`}
-              >
-                <Icon
-                  size={18}
-                  className={
+              <React.Fragment key={item.href}>
+                <Link
+                  href={item.href}
+                  className={`group flex items-center gap-3 rounded-sm px-4 py-3 text-sm font-medium transition ${
                     isActive
-                      ? "text-background"
-                      : "text-foreground/40 transition group-hover:text-foreground/70"
-                  }
-                />
-                {item.label}
-              </Link>
+                      ? "bg-foreground text-background"
+                      : "text-foreground/55 hover:bg-foreground/5 hover:text-foreground"
+                  }`}
+                >
+                  <Icon
+                    size={18}
+                    className={
+                      isActive
+                        ? "text-background"
+                        : "text-foreground/40 transition group-hover:text-foreground/70"
+                    }
+                  />
+                  {item.label}
+                </Link>
+                {/* Render Collections submenu under Collections */}
+                {item.href === "/collections" && (
+                  <div className="mb-2 mt-1 flex flex-col gap-1 pl-11 pr-4">
+                    {topTags.map((tag) => (
+                      <Link
+                        key={tag.tag}
+                        href={`/vocab?tag=${encodeURIComponent(tag.tag)}`}
+                        className="group flex items-center justify-between rounded-sm px-2 py-1.5 text-xs font-medium text-foreground/50 hover:bg-foreground/5 hover:text-foreground transition"
+                      >
+                        <span>#{tag.tag}</span>
+                        <span className="text-[10px] text-foreground/30 group-hover:text-foreground/50 transition">
+                          {tag.word_count}
+                        </span>
+                      </Link>
+                    ))}
+                    {topTags.length === 0 && (
+                      <span className="text-xs text-foreground/30 italic px-2 py-1">No collections yet</span>
+                    )}
+                  </div>
+                )}
+              </React.Fragment>
             );
           })}
         </nav>

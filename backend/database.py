@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Float, DateTime, ForeignKey, Boolean, Date
+from sqlalchemy import Column, Integer, String, Float, DateTime, ForeignKey, Boolean, Date, UniqueConstraint
 from sqlalchemy.orm import declarative_base
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from sqlalchemy.orm import sessionmaker
@@ -49,6 +49,39 @@ class UserVocabProgress(Base):
     translation = Column(String(1000), nullable=True)
     en_explanation = Column(String(2000), nullable=True)
     vi_explanation = Column(String(2000), nullable=True)
+
+class Tag(Base):
+    __tablename__ = "tags"
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(String(36), ForeignKey("users.user_id"), nullable=False, index=True)
+    name = Column(String(100), nullable=False)
+    color = Column(String(7), nullable=True)  # hex color e.g. "#3b82f6"
+    __table_args__ = (
+        UniqueConstraint("user_id", "name", name="uq_user_tag_name"),
+    )
+
+class VocabTag(Base):
+    __tablename__ = "vocab_tags"
+    user_id = Column(String(36), ForeignKey("users.user_id"), primary_key=True)
+    vocab_id = Column(Integer, ForeignKey("vocabularies.id"), primary_key=True)
+    tag_id = Column(Integer, ForeignKey("tags.id"), primary_key=True)
+
+class Collection(Base):
+    __tablename__ = "collections"
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(String(36), ForeignKey("users.user_id"), nullable=False, index=True)
+    name = Column(String(255), nullable=False)
+    description = Column(String(500), nullable=True)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+    __table_args__ = (
+        UniqueConstraint("user_id", "name", name="uq_user_collection_name"),
+    )
+
+class CollectionWord(Base):
+    __tablename__ = "collection_words"
+    collection_id = Column(Integer, ForeignKey("collections.id"), primary_key=True)
+    user_id = Column(String(36), ForeignKey("users.user_id"), primary_key=True)
+    vocab_id = Column(Integer, ForeignKey("vocabularies.id"), primary_key=True)
 
 async def init_db():
     async with engine.begin() as conn:

@@ -187,6 +187,7 @@ export interface VocabItem {
   en_explanation?: string;
   vi_explanation?: string;
   next_review_date?: string;
+  tags?: string[];
 }
 
 export interface VocabListResponse {
@@ -211,6 +212,17 @@ export interface SpecializationsResponse {
   status: string;
   total_due: number;
   data: SpecializationOption[];
+}
+
+export interface TagOption {
+  tag: string;
+  word_count: number;
+  due_count: number;
+}
+
+export interface TagsResponse {
+  status: string;
+  data: TagOption[];
 }
 
 export interface QuizQuestion {
@@ -275,13 +287,19 @@ export const getVocabList = async (
   search?: string,
   status?: string,
   specialization?: string,
-  difficulty?: string
+  difficulty?: string,
+  tags?: string[]
 ): Promise<VocabListResponse> => {
   let query = `?page=${page}&limit=${limit}`;
   if (search) query += `&search=${encodeURIComponent(search)}`;
   if (status) query += `&status=${status}`;
-  if (specialization) query += `&specialization=${specialization}`;
-  if (difficulty) query += `&difficulty=${difficulty}`;
+  if (specialization) query += `&specialization=${encodeURIComponent(specialization)}`;
+  if (difficulty) query += `&difficulty=${encodeURIComponent(difficulty)}`;
+  if (tags && tags.length > 0) {
+    tags.forEach((tag) => {
+      query += `&tags=${encodeURIComponent(tag)}`;
+    });
+  }
   return requestJson<VocabListResponse>(`/api/vocab/list${query}`, {
     method: "GET",
   });
@@ -293,13 +311,27 @@ export const getPracticeSpecializations = async (): Promise<SpecializationsRespo
   });
 };
 
+export const getTags = async (): Promise<TagsResponse> => {
+  return requestJson<TagsResponse>("/api/tags", {
+    method: "GET",
+  });
+};
+
 export const getPracticeList = async (
   specialization?: string,
+  tags?: string[]
 ): Promise<PracticeListResponse> => {
   let query = "";
+  const params = new URLSearchParams();
   if (specialization && specialization !== "all") {
-    query = `?specialization=${encodeURIComponent(specialization)}`;
+    params.append("specialization", specialization);
   }
+  if (tags && tags.length > 0) {
+    tags.forEach((tag) => params.append("tags", tag));
+  }
+  const paramStr = params.toString();
+  if (paramStr) query = `?${paramStr}`;
+
   return requestJson<PracticeListResponse>(`/api/vocab/practice${query}`, {
     method: "GET",
   });
@@ -309,12 +341,18 @@ export const getQuiz = async (
   specialization?: string,
   count = 10,
   quizType = "en_to_vi",
+  tags?: string[]
 ): Promise<QuizResponse> => {
-  let query = `?count=${count}&quiz_type=${quizType}`;
+  const params = new URLSearchParams();
+  params.append("count", count.toString());
+  params.append("quiz_type", quizType);
   if (specialization && specialization !== "all") {
-    query += `&specialization=${encodeURIComponent(specialization)}`;
+    params.append("specialization", specialization);
   }
-  return requestJson<QuizResponse>(`/api/vocab/quiz${query}`, {
+  if (tags && tags.length > 0) {
+    tags.forEach((tag) => params.append("tags", tag));
+  }
+  return requestJson<QuizResponse>(`/api/vocab/quiz?${params.toString()}`, {
     method: "GET",
   });
 };
@@ -334,6 +372,26 @@ export const updateVocabProgress = async (
   return requestJson<ProgressUpdateResponse>("/api/update-progress", {
     method: "POST",
     body: JSON.stringify(payload),
+  });
+};
+
+export const syncTags = async (
+  word: string,
+  tags: string[]
+): Promise<{ status: string; tags: string[] }> => {
+  return requestJson<{ status: string; tags: string[] }>(`/api/tags/word/${encodeURIComponent(word)}/tags/sync`, {
+    method: "PUT",
+    body: JSON.stringify({ tags }),
+  });
+};
+
+export const overrideSpecialization = async (
+  word: string,
+  specialization: string
+): Promise<{ status: string; specialization: string }> => {
+  return requestJson<{ status: string; specialization: string }>(`/api/tags/word/${encodeURIComponent(word)}/specialization`, {
+    method: "PUT",
+    body: JSON.stringify({ specialization }),
   });
 };
 

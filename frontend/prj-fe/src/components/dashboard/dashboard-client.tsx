@@ -153,11 +153,35 @@ export const DashboardClient = () => {
       })
       .slice(0, 5);
 
+    const collections = (() => {
+      const tagMap = new Map<string, { total: number, mastered: number, due: number }>();
+      for (const item of vocabItems) {
+        if (item.tags && Array.isArray(item.tags)) {
+          for (const tag of item.tags) {
+            if (!tagMap.has(tag)) tagMap.set(tag, { total: 0, mastered: 0, due: 0 });
+            const stats = tagMap.get(tag)!;
+            stats.total++;
+            if (item.status === "mastered") stats.mastered++;
+            
+            const reviewDate = safeDate(item.next_review_date);
+            if (item.status !== "unseen" && reviewDate && reviewDate <= todayStart) {
+              stats.due++;
+            }
+          }
+        }
+      }
+      return Array.from(tagMap.entries())
+        .map(([tag, stats]) => ({ tag, ...stats }))
+        .sort((a, b) => b.total - a.total)
+        .slice(0, 6); // show top 6 collections
+    })();
+
     return {
       dueToday,
       retentionRate,
       forecastBuckets,
       recentWords,
+      collections,
     };
   }, [stats, vocabItems]);
 
@@ -362,6 +386,70 @@ export const DashboardClient = () => {
             View all
           </Link>
         </article>
+      </section>
+
+      {/* ── Tầng 5: Collections ─────────────────────────────────── */}
+      <section className="border-t border-foreground/10 pt-8">
+        <div className="flex items-end justify-between mb-6">
+          <div>
+            <p className="editorial-meta">Your Collections</p>
+            <h2 className="mt-2 font-serif text-2xl">
+              Vocabulary by Tags
+            </h2>
+          </div>
+          <Link
+            href="/vocab"
+            className="text-xs font-semibold uppercase tracking-widest text-foreground/50 transition hover:text-foreground"
+          >
+            Manage Tags
+          </Link>
+        </div>
+
+        {metrics.collections.length === 0 ? (
+          <div className="border border-dashed border-foreground/20 p-8 text-center text-sm text-foreground/40">
+            You don&apos;t have any collections yet. Add tags to your vocabulary to create collections.
+          </div>
+        ) : (
+          <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+            {metrics.collections.map((col) => (
+              <article key={col.tag} className="flex flex-col justify-between border border-foreground/10 bg-white p-6 transition hover:border-foreground/20">
+                <div>
+                  <h3 className="font-serif text-xl font-bold flex items-center gap-2">
+                    <span className="text-accent">#</span>{col.tag}
+                  </h3>
+                  <p className="mt-2 text-sm text-foreground/50">
+                    Total: <span className="font-semibold text-foreground">{col.total}</span> words
+                    <span className="mx-2">·</span>
+                    Mastered: <span className="font-semibold text-foreground">{col.mastered}</span>
+                  </p>
+                  
+                  {/* Progress bar */}
+                  <div className="mt-3 h-1.5 w-full bg-foreground/5 overflow-hidden">
+                    <div 
+                      className="h-full bg-foreground transition-all duration-500" 
+                      style={{ width: `${Math.round((col.mastered / col.total) * 100)}%` }} 
+                    />
+                  </div>
+                </div>
+
+                <div className="mt-6 flex items-center gap-3">
+                  <Link
+                    href={`/practice?tag=${encodeURIComponent(col.tag)}`}
+                    className="flex-1 text-center bg-foreground px-3 py-2 text-xs font-semibold text-background transition hover:bg-foreground/80"
+                  >
+                    {col.due > 0 ? `Practice (${col.due} due)` : "Practice"}
+                  </Link>
+                  <Link
+                    href={`/vocab?tag=${encodeURIComponent(col.tag)}`}
+                    className="flex-1 text-center border border-foreground/10 px-3 py-2 text-xs font-semibold transition hover:bg-foreground/5"
+                  >
+                    View details
+                  </Link>
+                </div>
+              </article>
+            ))}
+          </div>
+        )}
       </section>
 
       {partialDataNote && (

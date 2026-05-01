@@ -1,7 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, useMemo } from "react";
 import { AnimatePresence, motion } from "framer-motion";
+import { useSearchParams } from "next/navigation";
 import {
   BrainCircuit,
   GraduationCap,
@@ -15,8 +16,10 @@ import {
   getPracticeList,
   getPracticeSpecializations,
   getQuiz,
+  getTags,
   QuizQuestion,
   SpecializationOption,
+  TagOption,
   VocabItem,
 } from "@/lib/api";
 
@@ -40,10 +43,18 @@ export const PracticeClient = () => {
   const [selectedSpec, setSelectedSpec] = useState("all");
   const [quizType, setQuizType] = useState<"en_to_vi" | "vi_to_en">("en_to_vi");
 
+  const searchParams = useSearchParams();
+  const initialTag = searchParams.get("tag");
+
   /* ── Config data ────────────────────────────────────────────── */
   const [specOptions, setSpecOptions] = useState<SpecializationOption[]>([]);
+  const [tagOptions, setTagOptions] = useState<TagOption[]>([]);
   const [totalDue, setTotalDue] = useState(0);
   const [configLoading, setConfigLoading] = useState(true);
+
+  /* ── Source management ──────────────────────────────────────── */
+  const [source, setSource] = useState<"review" | "collection">(initialTag ? "collection" : "review");
+  const [selectedTag, setSelectedTag] = useState<string>(initialTag || "all");
 
   /* ── Active data ────────────────────────────────────────────── */
   const [practiceList, setPracticeList] = useState<VocabItem[]>([]);
@@ -59,12 +70,13 @@ export const PracticeClient = () => {
   const loadConfig = useCallback(async () => {
     setConfigLoading(true);
     try {
-      const res = await getPracticeSpecializations();
-      setSpecOptions(res.data ?? []);
-      setTotalDue(res.total_due ?? 0);
-    } catch {
-      setSpecOptions([]);
-      setTotalDue(0);
+      const [specRes, tagsRes] = await Promise.all([
+        getPracticeSpecializations().catch(() => ({ data: [], total_due: 0 })),
+        getTags().catch(() => ({ data: [] }))
+      ]);
+      setSpecOptions(specRes.data ?? []);
+      setTotalDue(specRes.total_due ?? 0);
+      setTagOptions(tagsRes.data ?? []);
     } finally {
       setConfigLoading(false);
     }
@@ -83,9 +95,12 @@ export const PracticeClient = () => {
 
     try {
       if (selectedMode === "flashcard") {
-        const res = await getPracticeList(selectedSpec !== "all" ? selectedSpec : undefined);
+        const res = await getPracticeList(
+          selectedSpec !== "all" ? selectedSpec : undefined,
+          source === "collection" && selectedTag !== "all" ? [selectedTag] : undefined
+        );
         if (!res.data?.length) {
-          setError("No words due for review in this specialization.");
+          setError("No words due for review with the selected filters.");
           setActiveLoading(false);
           return;
         }
@@ -95,6 +110,7 @@ export const PracticeClient = () => {
           selectedSpec !== "all" ? selectedSpec : undefined,
           20,
           quizType,
+          source === "collection" && selectedTag !== "all" ? [selectedTag] : undefined
         );
         if (!res.data?.length) {
           setError("Not enough words to generate a quiz. You need at least 4 words with translations.");
@@ -125,10 +141,15 @@ export const PracticeClient = () => {
   };
 
   /* ── Derived values ─────────────────────────────────────────── */
-  const dueForSelected =
-    selectedSpec === "all"
-      ? totalDue
-      : specOptions.find((s) => s.specialization === selectedSpec)?.due_count ?? 0;
+  const dueForSelected = useMemo(() => {
+    if (source === "collection" && selectedTag !== "all") {
+      return tagOptions.find(t => t.tag === selectedTag)?.due_count ?? 0;
+    }
+    if (selectedSpec !== "all") {
+      return specOptions.find(s => s.specialization === selectedSpec)?.due_count ?? 0;
+    }
+    return totalDue;
+  }, [source, selectedTag, selectedSpec, tagOptions, specOptions, totalDue]);
 
   /* ── Render ─────────────────────────────────────────────────── */
   return (
@@ -170,58 +191,75 @@ export const PracticeClient = () => {
                 <p className="editorial-meta animate-pulse text-center">Loading practice data...</p>
               ) : (
                 <div className="space-y-6">
-                  {/* Specialization picker */}
+                  {/* Source picker */}
                   <div className="border border-foreground/10 bg-white p-8">
                     <div className="flex items-center gap-2 mb-5">
                       <Tag size={16} className="text-accent" />
-                      <p className="editorial-meta text-foreground">Choose specialization</p>
+                      <p className="editorial-meta text-foreground">Choose Source</p>
                     </div>
 
-                    <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-                      {/* All option */}
+                    <div className="grid grid-cols-2 gap-3 mb-6">
                       <button
                         type="button"
-                        onClick={() => setSelectedSpec("all")}
-                        className={`flex flex-col items-start border px-4 py-3 text-left transition ${
-                          selectedSpec === "all"
-                            ? "border-accent bg-accent/5"
+                        onClick={() => setSource("review")}
+                        className={`flex flex-col items-center gap-2 border p-4 transition ${
+                          source === "review"
+                            ? "border-accent bg-accent/5 text-accent"
                             : "border-foreground/10 hover:bg-foreground/[0.03]"
                         }`}
                       >
-                        <span className="text-sm font-semibold">All Fields</span>
-                        <span className="text-xs text-foreground/40 mt-1">{totalDue} due</span>
+                        <span className="text-sm font-bold">Words to Review</span>
                       </button>
-
-                      {specOptions.map((opt) => {
-                        const sc = getSpecColor(opt.specialization);
-                        const isSelected = selectedSpec === opt.specialization;
-                        return (
-                          <button
-                            key={opt.specialization}
-                            type="button"
-                            onClick={() => setSelectedSpec(opt.specialization)}
-                            className={`flex flex-col items-start border px-4 py-3 text-left transition ${
-                              isSelected
-                                ? "border-accent bg-accent/5"
-                                : "border-foreground/10 hover:bg-foreground/[0.03]"
-                            }`}
-                          >
-                            <span className="flex items-center gap-1.5">
-                              <span
-                                className="h-2 w-2 rounded-full"
-                                style={{ backgroundColor: sc.text }}
-                              />
-                              <span className="text-sm font-semibold">
-                                {getSpecDisplayName(opt.specialization)}
-                              </span>
-                            </span>
-                            <span className="text-xs text-foreground/40 mt-1">
-                              {opt.due_count} due
-                            </span>
-                          </button>
-                        );
-                      })}
+                      <button
+                        type="button"
+                        onClick={() => setSource("collection")}
+                        className={`flex flex-col items-center gap-2 border p-4 transition ${
+                          source === "collection"
+                            ? "border-accent bg-accent/5 text-accent"
+                            : "border-foreground/10 hover:bg-foreground/[0.03]"
+                        }`}
+                      >
+                        <span className="text-sm font-bold">By Collection/Tags</span>
+                      </button>
                     </div>
+
+                    {source === "collection" && (
+                      <motion.div
+                        initial={{ opacity: 0, height: 0 }}
+                        animate={{ opacity: 1, height: "auto" }}
+                      >
+                        <label className="mb-2 block text-xs font-semibold uppercase tracking-wider text-foreground/50">Select Tag</label>
+                        <select
+                          value={selectedTag}
+                          onChange={(e) => setSelectedTag(e.target.value)}
+                          className="w-full border border-foreground/15 bg-transparent px-3 py-2 text-sm outline-none transition focus:border-accent"
+                        >
+                          <option value="all">All Tags ({totalDue} due)</option>
+                          {tagOptions.map(t => (
+                            <option key={t.tag} value={t.tag}>{t.tag} ({t.due_count} due)</option>
+                          ))}
+                        </select>
+                      </motion.div>
+                    )}
+
+                    {source === "review" && (
+                      <motion.div
+                        initial={{ opacity: 0, height: 0 }}
+                        animate={{ opacity: 1, height: "auto" }}
+                      >
+                        <label className="mb-2 block text-xs font-semibold uppercase tracking-wider text-foreground/50">Filter by Specialization (Optional)</label>
+                        <select
+                          value={selectedSpec}
+                          onChange={(e) => setSelectedSpec(e.target.value)}
+                          className="w-full border border-foreground/15 bg-transparent px-3 py-2 text-sm outline-none transition focus:border-accent"
+                        >
+                          <option value="all">All Fields ({totalDue} due)</option>
+                          {specOptions.map(s => (
+                            <option key={s.specialization} value={s.specialization}>{s.specialization} ({s.due_count} due)</option>
+                          ))}
+                        </select>
+                      </motion.div>
+                    )}
                   </div>
 
                   {/* Mode picker */}
