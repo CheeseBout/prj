@@ -69,16 +69,13 @@
       isShowingLoginPrompt = false;
     }
 
-    // Luôn dọn dẹp chế độ cũ/hiện tại trước
     if (currentCleanupFunction) {
       currentCleanupFunction();
       currentCleanupFunction = null;
     }
 
-    // Nếu đang tắt thì chỉ cần dọn dẹp là xong, không khởi tạo chế độ mới
     if (!enabled) return;
 
-    // Nếu đang bật, bắt đầu khởi tạo chế độ tương ứng
     if (targetMode === "mode_vocab") {
       currentCleanupFunction = initVocabularyMode();
     } else if (targetMode === "mode_inline") {
@@ -86,16 +83,14 @@
     }
   }
 
-  // Khởi chạy lần đầu (Load cả Mode và Trạng thái Bật/Tắt)
   chrome.storage.sync.get(["translationMode", "extensionEnabled"], (result) => {
     const mode = result.translationMode || "mode_vocab";
-    const enabled = result.extensionEnabled !== false; // Mặc định là true nếu chưa lưu
+    const enabled = result.extensionEnabled !== false;
     switchMode(mode, enabled);
   });
 
   chrome.storage.onChanged.addListener((changes, namespace) => {
     if (namespace === "sync") {
-      // Nếu có bất kỳ sự thay đổi nào về setting, đọc lại và apply ngay
       chrome.storage.sync.get(["translationMode", "extensionEnabled"], (result) => {
         const mode = result.translationMode || "mode_vocab";
         const enabled = result.extensionEnabled !== false;
@@ -104,24 +99,21 @@
     }
   });
 
-  // Lắng nghe Message từ popup.js
   chrome.runtime.onMessage.addListener((request) => {
     if (request && request.action === "switchMode") {
       switchMode(request.mode, request.enabled !== false);
     }
-    // Sự kiện riêng cho lúc gạt công tắc bật/tắt
     if (request && request.action === "toggleExtension") {
       switchMode(request.mode, request.enabled);
     }
   });
 
   // =========================================================================
-  // CHẾ ĐỘ 1: HỌC TỪ VỰNG (HIGHLIGHT, TOOLTIP, BÔI ĐEN DỊCH THỦ CÔNG)
+  // CHẾ ĐỘ 1: HỌC TỪ VỰNG 
   // =========================================================================
   function initVocabularyMode() {
     const API_ENDPOINT = "http://localhost:8000/api/scan";
-    const UPDATE_PROGRESS_ENDPOINT =
-      "http://localhost:8000/api/update-progress";
+    const UPDATE_PROGRESS_ENDPOINT = "http://localhost:8000/api/update-progress";
     const BATCH_TIMEOUT = 300;
     const MAX_BATCH_SIZE = 25;
 
@@ -131,7 +123,6 @@
     const rangeDataMap = new Map();
     const nodeDataCache = new WeakMap();
 
-    // Khởi tạo DOM Elements
     const tooltip = document.createElement("div");
     tooltip.id = "gap-assistant-tooltip";
     tooltip.style.cssText =
@@ -148,18 +139,19 @@
     let currentManualRange = null;
     let currentManualText = "";
 
-    // CSS Custom Highlight API
     const gapHighlight = new Highlight();
     if (CSS.highlights) {
       CSS.highlights.set("language-gap", gapHighlight);
     }
 
     function generateNodeId(node) {
-      return (
-        node.tagName.toLowerCase() +
-        "-" +
-        Math.random().toString(36).substr(2, 9)
-      );
+      if (!node.hasAttribute("data-ll-vocab-id")) {
+        node.setAttribute(
+          "data-ll-vocab-id",
+          "vocab-" + Math.random().toString(36).substr(2, 9) + "-" + Date.now()
+        );
+      }
+      return node.getAttribute("data-ll-vocab-id");
     }
 
     function buildTextMapping(element) {
@@ -249,8 +241,7 @@
     }
 
     function getCaretRangeFromPoint(x, y) {
-      if (document.caretRangeFromPoint)
-        return document.caretRangeFromPoint(x, y);
+      if (document.caretRangeFromPoint) return document.caretRangeFromPoint(x, y);
       if (document.caretPositionFromPoint) {
         const pos = document.caretPositionFromPoint(x, y);
         if (!pos) return null;
@@ -266,8 +257,7 @@
       if (!pointRange || !targetRange) return false;
       try {
         return (
-          targetRange.compareBoundaryPoints(Range.START_TO_START, pointRange) <=
-            0 &&
+          targetRange.compareBoundaryPoints(Range.START_TO_START, pointRange) <= 0 &&
           targetRange.compareBoundaryPoints(Range.END_TO_END, pointRange) >= 0
         );
       } catch (_err) {
@@ -310,10 +300,7 @@
             },
           });
 
-          if (
-            response.status === "error" &&
-            response.error_type === "UNAUTHORIZED"
-          ) {
+          if (response.status === "error" && response.error_type === "UNAUTHORIZED") {
             showLoginPrompt();
           } else {
             alert("Đã ghi nhận!");
@@ -371,12 +358,8 @@
       const word = currentManualText.replace(/\s+/g, " ").trim();
       const parentElement =
         currentManualRange.commonAncestorContainer.nodeType === 3
-          ? currentManualRange.commonAncestorContainer.parentElement.closest(
-              "p, li, article, h1, h2, h3, span, div",
-            )
-          : currentManualRange.commonAncestorContainer.closest(
-              "p, li, article, h1, h2, h3, span, div",
-            );
+          ? currentManualRange.commonAncestorContainer.parentElement.closest("p, li, article, h1, h2, h3, span, div")
+          : currentManualRange.commonAncestorContainer.closest("p, li, article, h1, h2, h3, span, div");
 
       if (!parentElement) return;
 
@@ -491,15 +474,15 @@
           const data = response.data;
           if (data.status === "success" && data.highlights) {
             data.highlights.forEach((hlData) => {
-              const targetNodeObj = batchToSend.find(
-                (b) => b.id === hlData.element_id,
-              );
-              if (targetNodeObj && targetNodeObj.node)
-                applyHighlight(targetNodeObj.node, hlData);
+              let targetNode = document.querySelector(`[data-ll-vocab-id="${hlData.element_id}"]`);
+              if (!targetNode) {
+                  const targetNodeObj = batchToSend.find((b) => b.id === hlData.element_id);
+                  if (targetNodeObj && targetNodeObj.node) targetNode = targetNodeObj.node;
+              }
+              if (targetNode) applyHighlight(targetNode, hlData);
             });
           }
         } else if (response.error_type === "UNAUTHORIZED") {
-          console.warn("[Extension] Dừng scan vì chưa đăng nhập (401)");
           showLoginPrompt();
           pendingElements = [];
           return;
@@ -580,21 +563,22 @@
       rangeDataMap.clear();
       currentManualRange = null;
       currentManualText = "";
+      
+      document.querySelectorAll("[data-ll-vocab-id]").forEach(el => el.removeAttribute("data-ll-vocab-id"));
 
-      console.log("[Extension] Da don dep xong che do Hoc Tu Vung.");
+      console.log("[Extension] Đã dọn dẹp xong chế độ Học Từ Vựng.");
     };
   }
 
   // =========================================================================
-  // CHẾ ĐỘ 2: DỊCH CHÈN DÒNG (INLINE) & BẢO TOÀN LINK
+  // CHẾ ĐỘ 2: DỊCH CHÈN DÒNG (INLINE) & BẢO TOÀN LINK (SPA SAFE)
   // =========================================================================
   function initInlineTranslationMode() {
     const CONFIG = {
       API_URL: "http://localhost:8000/api/scan-inline",
-      OBSERVER_ROOT_MARGIN: "1500px 0px", // Đã mở rộng tầm nhìn
-      BATCH_DELAY_MS: 250, // Đã giảm độ trễ
-      MAX_BATCH_SIZE: 15,
-      MAX_TEXT_LENGTH: 5000,
+      OBSERVER_ROOT_MARGIN: "1500px 0px",
+      BATCH_DELAY_MS: 400, // Đã tăng delay để gom nhóm tốt hơn
+      MAX_BATCH_SIZE: 6,   // Giảm tải cho AI để tránh lỗi gộp câu
       TARGET_SELECTOR: "p, li, blockquote, dd, dt, h1, h2, h3, h4, h5, h6",
       HIGHLIGHT_NAME: "language-learning-highlight",
     };
@@ -604,7 +588,7 @@
     const processedElements = new Set();
     const textNodeCache = new Map();
     let batchTimer = null;
-    let isFlushing = false; // Thêm cờ khóa luồng
+    let isFlushing = false; 
 
     const supportsHighlights =
       typeof CSS !== "undefined" &&
@@ -618,26 +602,31 @@
       CSS.highlights.set(CONFIG.HIGHLIGHT_NAME, highlightRegistry);
     }
 
-    function getElementXPath(element) {
-      if (!element || element.nodeType !== Node.ELEMENT_NODE) return "";
-      if (element.id) return `//*[@id="${element.id}"]`;
-      const parts = [];
-      let current = element;
-      while (
-        current &&
-        current.nodeType === Node.ELEMENT_NODE &&
-        current !== document.body
-      ) {
-        let index = 1;
-        let sibling = current.previousElementSibling;
-        while (sibling) {
-          if (sibling.tagName === current.tagName) index += 1;
-          sibling = sibling.previousElementSibling;
+    // Danh sách thẻ Block. Bất kỳ element nào chứa thẻ con thuộc list này đều KHÔNG phải là thẻ lá.
+    const BLOCK_TAGS = new Set([
+      'P', 'DIV', 'UL', 'OL', 'LI', 'SECTION', 'ARTICLE', 'BLOCKQUOTE', 
+      'NAV', 'HEADER', 'FOOTER', 'TABLE', 'TR', 'TD', 'TH', 
+      'MAIN', 'ASIDE', 'FIGURE', 'H1', 'H2', 'H3', 'H4', 'H5', 'H6'
+    ]);
+
+    function isLeafBlock(element) {
+        if (!element.matches(CONFIG.TARGET_SELECTOR)) return false;
+        // Điểm mấu chốt chống bọc nhầm thẻ to: 
+        // Nếu bản thân nó chứa thẻ con mang tính cấu trúc khối, nó sẽ bị bỏ qua và đi sâu xuống quét tiếp thẻ con.
+        for (let i = 0; i < element.children.length; i++) {
+            if (BLOCK_TAGS.has(element.children[i].tagName.toUpperCase())) {
+                return false;
+            }
         }
-        parts.unshift(`${current.tagName.toLowerCase()}[${index}]`);
-        current = current.parentElement;
+        return true;
+    }
+
+    function getOrAssignElementId(element) {
+      if (!element.hasAttribute("data-ll-id")) {
+        const uniqueId = "ll-" + Math.random().toString(36).substr(2, 9) + "-" + Date.now();
+        element.setAttribute("data-ll-id", uniqueId);
       }
-      return `/html/body/${parts.join("/")}`;
+      return element.getAttribute("data-ll-id");
     }
 
     function buildTextNodeIndex(element) {
@@ -659,9 +648,17 @@
       const map = [];
       let cursor = 0;
       let combinedText = "";
+      
       while (walker.nextNode()) {
         const node = walker.currentNode;
-        const value = node.nodeValue || "";
+        let value = node.nodeValue || "";
+        
+        // FIX Lỗi dính chữ: Tự động đệm khoảng trắng khi nối text giữa các Node riêng biệt
+        if (combinedText.length > 0 && !combinedText.match(/[\s\n]$/) && !value.match(/^[\s\n]/)) {
+            combinedText += " ";
+            cursor += 1;
+        }
+
         const start = cursor;
         const end = cursor + value.length;
         map.push({ node, start, end });
@@ -715,27 +712,35 @@
     }
 
     function queueElementForScan(element) {
-      if (element.closest(".ll-translatable, .ll-original, .ll-translation"))
-        return;
-      if (
-        element.parentElement &&
-        element.parentElement.closest(CONFIG.TARGET_SELECTOR)
-      )
-        return;
-      const elementId = getElementXPath(element);
-      if (!elementId || processedElements.has(elementId)) return;
+      if (element.closest(".ll-translatable, .ll-original, .ll-translation")) return;
+      if (!isLeafBlock(element)) return; 
+      
+      const elementId = getOrAssignElementId(element);
+      if (processedElements.has(elementId)) return;
+      
       const { map, text } = buildTextNodeIndex(element);
       const fullText = text || "";
-      if (!fullText.trim()) return;
+      if (fullText.trim().length < 2) return;
+
+      let contextBefore = "";
+      let contextAfter = "";
+      if (element.previousElementSibling) {
+        contextBefore = (element.previousElementSibling.textContent || "").trim().slice(-300);
+      }
+      if (element.nextElementSibling) {
+        contextAfter = (element.nextElementSibling.textContent || "").trim().slice(0, 300);
+      }
 
       textNodeCache.set(elementId, map);
       queuedElements.set(elementId, {
         element_id: elementId,
-        text_context: fullText.slice(0, CONFIG.MAX_TEXT_LENGTH),
-        html_context: getCleanedHTML(element),
+        text_context: fullText.slice(0, 4000),
+        // FIX Lỗi AI trộn câu: Gói HTML Context vào màng bọc tĩnh để cách ly hoàn toàn
+        html_context: `<div class="ll-isolate">${getCleanedHTML(element)}</div>`,
+        context_before: contextBefore,
+        context_after: contextAfter
       });
 
-      // Chỉ gom vào map và debounce, không gọi gửi đi lập tức
       if (batchTimer) clearTimeout(batchTimer);
       batchTimer = setTimeout(processBatchQueue, CONFIG.BATCH_DELAY_MS);
     }
@@ -745,18 +750,9 @@
       for (const hit of highlightItems) {
         try {
           const { element_id, startIndex, endIndex } = hit;
-          if (
-            !element_id ||
-            typeof startIndex !== "number" ||
-            typeof endIndex !== "number" ||
-            endIndex <= startIndex
-          )
+          if (!element_id || typeof startIndex !== "number" || typeof endIndex !== "number" || endIndex <= startIndex)
             continue;
-          const range = createRangeFromOffsets(
-            element_id,
-            startIndex,
-            endIndex,
-          );
+          const range = createRangeFromOffsets(element_id, startIndex, endIndex);
           if (range) highlightRegistry.add(range);
         } catch (error) {}
       }
@@ -781,33 +777,25 @@
     }
 
     function replaceTextWithAnchors(text, anchorLookup) {
-      const keys = Array.from(anchorLookup.keys()).sort(
-        (a, b) => b.length - a.length,
-      );
+      const keys = Array.from(anchorLookup.keys()).sort((a, b) => b.length - a.length);
       if (!keys.length || !text) return null;
       const pattern = new RegExp(keys.map(escapeRegExp).join("|"), "g");
-      let match = null,
-        lastIndex = 0;
+      let match = null, lastIndex = 0;
       const fragment = document.createDocumentFragment();
       let hasReplacement = false;
 
       while ((match = pattern.exec(text)) !== null) {
         const [token] = match;
         const prevChar = match.index > 0 ? text[match.index - 1] : " ";
-        const nextChar =
-          match.index + token.length < text.length
-            ? text[match.index + token.length]
-            : " ";
+        const nextChar = match.index + token.length < text.length ? text[match.index + token.length] : " ";
         const isAlphanumeric = /[a-zA-Z0-9_]/;
 
-        if (isAlphanumeric.test(prevChar) || isAlphanumeric.test(nextChar))
-          continue;
+        if (isAlphanumeric.test(prevChar) || isAlphanumeric.test(nextChar)) continue;
         hasReplacement = true;
 
         if (match.index > lastIndex)
-          fragment.appendChild(
-            document.createTextNode(text.slice(lastIndex, match.index)),
-          );
+          fragment.appendChild(document.createTextNode(text.slice(lastIndex, match.index)));
+        
         const anchorTemplate = document.createElement("template");
         anchorTemplate.innerHTML = anchorLookup.get(token) || token;
         fragment.appendChild(anchorTemplate.content.cloneNode(true));
@@ -819,30 +807,21 @@
       return fragment;
     }
 
-    function enrichTranslatedHtmlWithOriginalLinks(
-      sourceElement,
-      translatedHtml,
-    ) {
+    function enrichTranslatedHtmlWithOriginalLinks(sourceElement, translatedHtml) {
       if (!(sourceElement instanceof Element)) return translatedHtml;
       const anchorLookup = buildAnchorLookup(sourceElement);
       if (!anchorLookup.size) return translatedHtml;
 
       const template = document.createElement("template");
       template.innerHTML = translatedHtml;
-      const walker = document.createTreeWalker(
-        template.content,
-        NodeFilter.SHOW_TEXT,
-      );
+      const walker = document.createTreeWalker(template.content, NodeFilter.SHOW_TEXT);
       const textNodes = [];
       while (walker.nextNode()) textNodes.push(walker.currentNode);
 
       for (const textNode of textNodes) {
         const parent = textNode.parentElement;
         if (parent && parent.closest("a")) continue;
-        const replaced = replaceTextWithAnchors(
-          textNode.nodeValue || "",
-          anchorLookup,
-        );
+        const replaced = replaceTextWithAnchors(textNode.nodeValue || "", anchorLookup);
         if (replaced && textNode.parentNode)
           textNode.parentNode.replaceChild(replaced, textNode);
       }
@@ -853,34 +832,31 @@
       if (!Array.isArray(translations)) return;
       for (const item of translations) {
         const { element_id, translated_text } = item || {};
-        if (
-          !element_id ||
-          typeof translated_text !== "string" ||
-          !translated_text.trim()
-        )
-          continue;
+        if (!element_id || typeof translated_text !== "string" || !translated_text.trim()) continue;
 
         try {
-          const result = document.evaluate(
-            element_id,
-            document,
-            null,
-            XPathResult.FIRST_ORDERED_NODE_TYPE,
-            null,
-          );
-          const el = result.singleNodeValue;
+          const el = document.querySelector(`[data-ll-id="${element_id}"]`);
           if (!el || !(el instanceof Element)) continue;
 
           if (el.classList.contains("ll-translatable")) {
             const existing = el.querySelector(":scope > .ll-translation");
-            if (existing) existing.innerHTML = translated_text;
+            if (existing) {
+                // Parse màng bọc do LLM trả về nếu có
+                let updatedHtml = translated_text;
+                const match = updatedHtml.match(/<div class="ll-isolate">([\s\S]*?)<\/div>/i);
+                if (match) updatedHtml = match[1].trim();
+                existing.innerHTML = updatedHtml;
+            }
             continue;
           }
 
-          let translatedHtml = enrichTranslatedHtmlWithOriginalLinks(
-            el,
-            translated_text,
-          );
+          let translatedHtml = translated_text;
+          const isolateMatch = translatedHtml.match(/<div class="ll-isolate">([\s\S]*?)<\/div>/i);
+          if (isolateMatch) {
+              translatedHtml = isolateMatch[1].trim();
+          }
+
+          translatedHtml = enrichTranslatedHtmlWithOriginalLinks(el, translatedHtml);
 
           const originalMaths = el.querySelectorAll("math, .math, .mjx-chtml, .mwe-math-wrapper");
           originalMaths.forEach((mathEl, index) => {
@@ -894,7 +870,19 @@
           const computedStyle = window.getComputedStyle(el);
           el.style.setProperty("--ll-fs", computedStyle.fontSize);
           el.style.setProperty("--ll-lh", computedStyle.lineHeight);
-          el.style.setProperty("--ll-color", computedStyle.color);
+          
+          // FIX Lỗi chữ bị tàng hình: Dò ngược DOM để bắt màu an toàn, thay vì lấy mã transparent
+          let safeColor = 'inherit';
+          let currentEl = el;
+          while (currentEl && currentEl.nodeType === 1) {
+              const col = window.getComputedStyle(currentEl).color;
+              if (col && col !== 'rgba(0, 0, 0, 0)' && col !== 'transparent') {
+                  safeColor = col;
+                  break;
+              }
+              currentEl = currentEl.parentElement;
+          }
+          el.style.setProperty("--ll-color", safeColor);
 
           const translationWrapper = document.createElement("span");
           translationWrapper.className = "ll-translation";
@@ -926,14 +914,12 @@
 
     async function processBatchQueue() {
       if (isFlushing || queuedElements.size === 0) return;
-      isFlushing = true; // Khóa lại, không cho các request khác chạy song song
+      isFlushing = true;
 
       while (queuedElements.size > 0) {
-        // Lấy ra đúng số lượng MAX_BATCH_SIZE
         const batchKeys = Array.from(queuedElements.keys()).slice(0, CONFIG.MAX_BATCH_SIZE);
         const payloadElements = batchKeys.map((key) => queuedElements.get(key));
 
-        // Chuyển các phần tử này sang trạng thái "đã xử lý" và xóa khỏi hàng đợi
         for (const key of batchKeys) {
           processedElements.add(key);
           queuedElements.delete(key);
@@ -957,10 +943,9 @@
             if (response.error_type === "UNAUTHORIZED") {
               console.warn("[LL Scanner] Dừng scan vì chưa đăng nhập (401)");
               showLoginPrompt();
-              break; // Dừng toàn bộ hàng đợi nếu chưa đăng nhập
+              break; 
             }
-            console.warn(`API returned error: ${response.message}`);
-            continue; // Lỗi thì bỏ qua mẻ này, chạy mẻ tiếp theo
+            continue; 
           }
 
           const data = response.data;
@@ -970,7 +955,6 @@
           applyHighlights(responseData);
           applyTranslations(translationData);
           
-          // Nghỉ 300ms giữa các mẻ để backend "thở", tránh Rate Limit
           await new Promise(resolve => setTimeout(resolve, 300)); 
 
         } catch (error) {
@@ -978,19 +962,13 @@
         }
       }
 
-      isFlushing = false; // Mở khóa khi hàng đợi đã cạn
+      isFlushing = false;
     }
 
     function observeCandidate(element, intersectionObserver) {
       if (!(element instanceof Element)) return;
-      if (!element.matches(CONFIG.TARGET_SELECTOR)) return;
-      if (element.closest(".ll-translatable, .ll-original, .ll-translation"))
-        return;
-      if (
-        element.parentElement &&
-        element.parentElement.closest(CONFIG.TARGET_SELECTOR)
-      )
-        return;
+      if (element.closest(".ll-translatable, .ll-original, .ll-translation")) return;
+      if (!isLeafBlock(element)) return;
       if (observedElements.has(element)) return;
 
       observedElements.add(element);
@@ -1000,11 +978,8 @@
     function observeTextElementsInSubtree(root, intersectionObserver) {
       if (!(root instanceof Element || root instanceof Document)) return;
       if (root instanceof Element) observeCandidate(root, intersectionObserver);
-      const matches = root.querySelectorAll
-        ? root.querySelectorAll(CONFIG.TARGET_SELECTOR)
-        : [];
-      for (const element of matches)
-        observeCandidate(element, intersectionObserver);
+      const matches = root.querySelectorAll ? root.querySelectorAll(CONFIG.TARGET_SELECTOR) : [];
+      for (const element of matches) observeCandidate(element, intersectionObserver);
     }
 
     const intersectionObserver = new IntersectionObserver(
@@ -1075,12 +1050,14 @@
           el.removeChild(translationWrapper);
         }
       });
+      
+      document.querySelectorAll("[data-ll-id]").forEach(el => el.removeAttribute("data-ll-id"));
 
       queuedElements.clear();
       processedElements.clear();
       textNodeCache.clear();
 
-      console.log("[Extension] Da don dep xong che do Inline.");
+      console.log("[Extension] Đã dọn dẹp xong chế độ Inline.");
     };
   }
 })();
