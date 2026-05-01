@@ -11,6 +11,12 @@
   --font-serif: "Playfair Display", "Georgia", serif;
 }
 
+/* Fallbacks for Tailwind v4 utility generation issues */
+@utility text-background { color: var(--color-background); }
+@utility bg-foreground { background-color: var(--color-foreground); }
+@utility text-foreground { color: var(--color-foreground); }
+@utility bg-background { background-color: var(--color-background); }
+
 /* ── Base ────────────────────────────────────────────────────────── */
 
 *,
@@ -25,6 +31,7 @@
 }
 
 html {
+  color-scheme: light;
   scroll-behavior: smooth;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;

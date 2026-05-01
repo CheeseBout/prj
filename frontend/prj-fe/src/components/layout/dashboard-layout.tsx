@@ -11,6 +11,8 @@ import {
   UserRound,
   ArrowRight,
   Layers,
+  ChevronRight,
+  ChevronDown,
 } from "lucide-react";
 
 import { logout } from "@/lib/api";
@@ -34,15 +36,16 @@ export const DashboardLayoutShell = ({
 }: DashboardLayoutShellProps) => {
   const pathname = usePathname();
   const router = useRouter();
-  const [topTags, setTopTags] = React.useState<TagOption[]>([]);
+  const [allTags, setAllTags] = React.useState<TagOption[]>([]);
+  const [isCollectionsOpen, setIsCollectionsOpen] = React.useState(false);
 
   React.useEffect(() => {
     getTags()
       .then((res) => {
         if (res.data) {
-          // Sort by word_count descending and take top 5
-          const sorted = [...res.data].sort((a, b) => b.word_count - a.word_count).slice(0, 5);
-          setTopTags(sorted);
+          // Sort by word_count descending
+          const sorted = [...res.data].sort((a, b) => b.word_count - a.word_count);
+          setAllTags(sorted);
         }
       })
       .catch(() => {
@@ -74,13 +77,56 @@ export const DashboardLayoutShell = ({
           {navItems.map((item) => {
             const Icon = item.icon;
             const isActive = pathname === item.href;
+            if (item.label === "Collections") {
+              return (
+                <React.Fragment key={item.href}>
+                  <button
+                    onClick={() => setIsCollectionsOpen(!isCollectionsOpen)}
+                    className="group flex w-full items-center justify-between rounded-sm px-4 py-3 text-sm font-medium transition text-foreground/55 hover:bg-foreground/5 hover:text-foreground"
+                  >
+                    <div className="flex items-center gap-3">
+                      <Icon
+                        size={18}
+                        className="text-foreground/40 transition group-hover:text-foreground/70"
+                      />
+                      {item.label}
+                    </div>
+                    {isCollectionsOpen ? (
+                      <ChevronDown size={14} className="text-foreground/40" />
+                    ) : (
+                      <ChevronRight size={14} className="text-foreground/40" />
+                    )}
+                  </button>
+                  {isCollectionsOpen && (
+                    <div className="mb-2 mt-1 flex flex-col gap-1 pl-11 pr-4 max-h-64 overflow-y-auto">
+                      {allTags.map((tag) => (
+                        <Link
+                          key={tag.tag}
+                          href={`/vocab?tag=${encodeURIComponent(tag.tag)}`}
+                          className="group flex items-center justify-between rounded-sm px-2 py-1.5 text-xs font-medium text-foreground/50 hover:bg-foreground/5 hover:text-foreground transition"
+                        >
+                          <span>#{tag.tag}</span>
+                          <span className="text-[10px] text-foreground/30 group-hover:text-foreground/50 transition">
+                            {tag.word_count}
+                          </span>
+                        </Link>
+                      ))}
+                      {allTags.length === 0 && (
+                        <span className="text-xs text-foreground/30 italic px-2 py-1">No collections yet</span>
+                      )}
+                    </div>
+                  )}
+                </React.Fragment>
+              );
+            }
+
             return (
               <React.Fragment key={item.href}>
                 <Link
                   href={item.href}
                   className={`group flex items-center gap-3 rounded-sm px-4 py-3 text-sm font-medium transition ${
                     isActive
-                      ? "bg-foreground text-background"
+                      ? "bg-accent text-white shadow-sm"
                       : "text-foreground/55 hover:bg-foreground/5 hover:text-foreground"
                   }`}
                 >
@@ -88,32 +134,12 @@ export const DashboardLayoutShell = ({
                     size={18}
                     className={
                       isActive
-                        ? "text-background"
+                        ? "text-white"
                         : "text-foreground/40 transition group-hover:text-foreground/70"
                     }
                   />
                   {item.label}
                 </Link>
-                {/* Render Collections submenu under Collections */}
-                {item.href === "/collections" && (
-                  <div className="mb-2 mt-1 flex flex-col gap-1 pl-11 pr-4">
-                    {topTags.map((tag) => (
-                      <Link
-                        key={tag.tag}
-                        href={`/vocab?tag=${encodeURIComponent(tag.tag)}`}
-                        className="group flex items-center justify-between rounded-sm px-2 py-1.5 text-xs font-medium text-foreground/50 hover:bg-foreground/5 hover:text-foreground transition"
-                      >
-                        <span>#{tag.tag}</span>
-                        <span className="text-[10px] text-foreground/30 group-hover:text-foreground/50 transition">
-                          {tag.word_count}
-                        </span>
-                      </Link>
-                    ))}
-                    {topTags.length === 0 && (
-                      <span className="text-xs text-foreground/30 italic px-2 py-1">No collections yet</span>
-                    )}
-                  </div>
-                )}
               </React.Fragment>
             );
           })}

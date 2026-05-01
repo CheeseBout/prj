@@ -87,6 +87,7 @@ async def get_vocab_list(
     status: Optional[str] = None,
     specialization: Optional[str] = None,
     difficulty: Optional[str] = None,
+    tags: List[str] = Query(None),
     db: AsyncSession = Depends(get_db), 
     current_user: User = Depends(get_current_user)
 ):
@@ -117,6 +118,14 @@ async def get_vocab_list(
 
     if difficulty and difficulty != "all":
         query = query.where(UserVocabProgress.difficulty == difficulty)
+        
+    if tags:
+        query = query.join(
+            VocabTag,
+            (VocabTag.vocab_id == UserVocabProgress.vocab_id) & (VocabTag.user_id == UserVocabProgress.user_id)
+        ).join(
+            Tag, Tag.id == VocabTag.tag_id
+        ).where(Tag.name.in_(tags))
         
     # Tính tổng
     count_query = select(func.count()).select_from(query.subquery())

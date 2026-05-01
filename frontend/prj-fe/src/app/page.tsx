@@ -71,7 +71,7 @@ export default function HomePage() {
             </Link>
             <Link
               href="/register"
-              className="rounded-full bg-foreground px-5 py-2 text-sm font-semibold text-background transition hover:bg-foreground/85"
+              className="rounded-full bg-accent px-5 py-2 text-sm font-semibold text-background transition hover:bg-foreground/85"
             >
               Get Started
             </Link>
