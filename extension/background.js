@@ -1,5 +1,70 @@
 const BACKEND_URL = "http://localhost:8000";
 const FRONTEND_URL = "http://localhost:3000";
+const PDF_TOGGLE_KEY = "pdfTranslationEnabled";
+const PDF_VIEWER_PATH = "pdfjs/web/viewer.html";
+
+let isPdfTranslationEnabled = false;
+
+function isHttpUrl(url) {
+  try {
+    const parsed = new URL(url);
+    return parsed.protocol === "http:" || parsed.protocol === "https:";
+  } catch (_error) {
+    return false;
+  }
+}
+
+function isLikelyPdfUrl(url) {
+  if (!isHttpUrl(url)) return false;
+
+  try {
+    const parsed = new URL(url);
+    const pathname = parsed.pathname.toLowerCase();
+    const fileQuery = (parsed.searchParams.get("file") || "").toLowerCase();
+
+    return (
+      pathname.endsWith(".pdf") ||
+      pathname.includes("/pdf/") ||
+      fileQuery.endsWith(".pdf")
+    );
+  } catch (_error) {
+    return false;
+  }
+}
+
+function buildPdfViewerUrl(pdfUrl) {
+  return chrome.runtime.getURL(
+    `${PDF_VIEWER_PATH}?file=${encodeURIComponent(pdfUrl)}`,
+  );
+}
+
+function syncPdfToggleFromStorage() {
+  chrome.storage.sync.get([PDF_TOGGLE_KEY], (result) => {
+    isPdfTranslationEnabled = result[PDF_TOGGLE_KEY] === true;
+  });
+}
+
+syncPdfToggleFromStorage();
+
+chrome.storage.onChanged.addListener((changes, namespace) => {
+  if (namespace !== "sync") return;
+  if (changes[PDF_TOGGLE_KEY]) {
+    isPdfTranslationEnabled = changes[PDF_TOGGLE_KEY].newValue === true;
+  }
+});
+
+chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
+  if (!isPdfTranslationEnabled) return;
+
+  const candidateUrl = changeInfo.url || tab?.url;
+  if (!candidateUrl) return;
+
+  const viewerBase = chrome.runtime.getURL(PDF_VIEWER_PATH);
+  if (candidateUrl.startsWith(viewerBase)) return;
+  if (!isLikelyPdfUrl(candidateUrl)) return;
+
+  chrome.tabs.update(tabId, { url: buildPdfViewerUrl(candidateUrl) });
+});
 
 const getCookie = (url, name) =>
   new Promise((resolve) => {

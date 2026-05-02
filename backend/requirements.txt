@@ -25,3 +25,7 @@ pydantic-settings
 PyJWT
 bcrypt
 email-validator
+
+# File Handling
+PyMuPDF>=1.23.0
+python-multipart>=0.0.6 

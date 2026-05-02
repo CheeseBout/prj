@@ -1,0 +1,126 @@
+:root {
+  color-scheme: light;
+  font-family: "Segoe UI", Arial, sans-serif;
+}
+
+body {
+  margin: 0;
+  background: #f1f5f9;
+  color: #0f172a;
+}
+
+.viewer-header {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: center;
+  padding: 10px 14px;
+  background: #0f172a;
+  color: #e2e8f0;
+}
+
+.source-url {
+  margin-top: 2px;
+  font-size: 12px;
+  word-break: break-all;
+  color: #94a3b8;
+}
+
+.controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.controls select,
+.controls button {
+  height: 30px;
+  border: 1px solid #334155;
+  border-radius: 6px;
+  padding: 0 10px;
+  background: #1e293b;
+  color: #e2e8f0;
+}
+
+#viewerRoot {
+  max-width: 1180px;
+  margin: 0 auto;
+  padding: 14px;
+}
+
+.pdf-page {
+  margin-bottom: 16px;
+  background: white;
+  border-radius: 10px;
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.08);
+  overflow: hidden;
+}
+
+.page-title {
+  margin: 0;
+  padding: 12px 14px;
+  font-size: 14px;
+  color: #1e293b;
+  border-bottom: 1px solid #e2e8f0;
+  background: #f8fafc;
+}
+
+.pdf-stage {
+  position: relative;
+  width: fit-content;
+  margin: 0 auto;
+  line-height: 1;
+}
+
+.pdf-canvas {
+  display: block;
+  max-width: 100%;
+  height: auto;
+}
+
+.textLayer {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  line-height: 1;
+  text-size-adjust: none;
+  forced-color-adjust: none;
+  transform-origin: 0 0;
+  z-index: 2;
+  color: #0f172a;
+  opacity: 1;
+}
+
+.textLayer :is(span, br) {
+  color: inherit;
+  position: absolute;
+  white-space: pre;
+  cursor: text;
+  transform-origin: 0 0;
+  font-size: 1.06em;
+  font-weight: 500;
+  text-shadow:
+    0 0 0.5px rgba(15, 23, 42, 0.95),
+    0 0 0.5px rgba(15, 23, 42, 0.95);
+}
+
+.textLayer span.markedContent {
+  top: 0;
+  height: 0;
+}
+
+.textLayer::selection,
+.textLayer ::selection {
+  background: rgba(59, 130, 246, 0.3);
+  color: #0f172a;
+}
+
+.viewer-message {
+  background: #fff;
+  border-radius: 10px;
+  padding: 18px;
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.08);
+}
