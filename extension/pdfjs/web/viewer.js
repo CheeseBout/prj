@@ -6,10 +6,12 @@ const viewerRoot = document.getElementById("viewerRoot");
 const sourceUrlNode = document.getElementById("sourceUrl");
 const scaleSelect = document.getElementById("scaleSelect");
 const reloadBtn = document.getElementById("reloadBtn");
+const openLocalPdfBtn = document.getElementById("openLocalPdfBtn");
+const localPdfInput = document.getElementById("localPdfInput");
 const pageTemplate = document.getElementById("pageTemplate");
 
-let activePdfUrl = "";
-let activeScale = Number(scaleSelect.value || 1.25);
+let activePdfSource = null;
+let activeScale = Number(scaleSelect.value || 1.35);
 let activeRenderEpoch = 0;
 let activeLoadingTask = null;
 
@@ -21,12 +23,14 @@ function showMessage(message) {
   viewerRoot.appendChild(box);
 }
 
-function getPdfUrlFromQuery() {
+function setSourceLabel(value) {
+  sourceUrlNode.textContent = value || "";
+}
+
+function parseRemotePdfUrlFromQuery() {
   const params = new URLSearchParams(window.location.search);
   const raw = params.get("file");
-  if (!raw) {
-    throw new Error('Missing "file" query parameter for PDF URL.');
-  }
+  if (!raw) return null;
 
   const viewerUrlPrefix = chrome.runtime.getURL("pdfjs/web/viewer.html");
   if (raw.startsWith(viewerUrlPrefix)) {
@@ -34,11 +38,40 @@ function getPdfUrlFromQuery() {
   }
 
   const parsed = new URL(raw);
-  if (!['http:', 'https:'].includes(parsed.protocol)) {
+  if (!["http:", "https:"].includes(parsed.protocol)) {
     throw new Error("Only http/https PDF URLs are supported.");
   }
 
   return parsed.href;
+}
+
+function cleanupEmptyTextSpans(textLayerEl) {
+  const spans = textLayerEl.querySelectorAll("span");
+  for (const span of spans) {
+    const content = span.textContent || "";
+    if (!content.trim()) {
+      span.remove();
+    }
+  }
+}
+
+function getDocumentSource() {
+  if (!activePdfSource) return null;
+
+  if (activePdfSource.kind === "remote") {
+    return {
+      url: activePdfSource.url,
+      withCredentials: false,
+    };
+  }
+
+  if (activePdfSource.kind === "local") {
+    return {
+      data: activePdfSource.data,
+    };
+  }
+
+  return null;
 }
 
 async function renderPage(pdfDoc, pageNumber, scale, renderEpoch) {
@@ -84,11 +117,17 @@ async function renderPage(pdfDoc, pageNumber, scale, renderEpoch) {
   await textLayer.render();
   if (renderEpoch !== activeRenderEpoch) return;
 
+  cleanupEmptyTextSpans(textLayerEl);
+
   viewerRoot.appendChild(node);
 }
 
 async function renderDocument(scale) {
-  if (!activePdfUrl) return;
+  const source = getDocumentSource();
+  if (!source) {
+    showMessage("Chon file PDF tu may hoac mo URL PDF de bat dau.");
+    return;
+  }
 
   activeRenderEpoch += 1;
   const renderEpoch = activeRenderEpoch;
@@ -104,10 +143,7 @@ async function renderDocument(scale) {
 
   showMessage("Dang tai PDF...");
 
-  const loadingTask = pdfjsLib.getDocument({
-    url: activePdfUrl,
-    withCredentials: false,
-  });
+  const loadingTask = pdfjsLib.getDocument(source);
   activeLoadingTask = loadingTask;
 
   let pdfDoc;
@@ -128,12 +164,42 @@ async function renderDocument(scale) {
   }
 }
 
+async function useLocalPdfFile(file) {
+  if (!file) return;
+
+  const isPdf =
+    file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf");
+  if (!isPdf) {
+    showMessage("File khong hop le. Vui long chon file .pdf.");
+    return;
+  }
+
+  const buffer = await file.arrayBuffer();
+  activePdfSource = {
+    kind: "local",
+    name: file.name,
+    data: new Uint8Array(buffer),
+  };
+
+  setSourceLabel(`Local: ${file.name}`);
+  document.title = `PDF.js Viewer - ${file.name}`;
+  await renderDocument(activeScale);
+}
+
 async function bootstrap() {
   try {
-    activePdfUrl = getPdfUrlFromQuery();
-    sourceUrlNode.textContent = activePdfUrl;
-    document.title = `PDF.js Viewer - ${activePdfUrl}`;
-    await renderDocument(activeScale);
+    const remoteUrl = parseRemotePdfUrlFromQuery();
+
+    if (remoteUrl) {
+      activePdfSource = { kind: "remote", url: remoteUrl };
+      setSourceLabel(remoteUrl);
+      document.title = `PDF.js Viewer - ${remoteUrl}`;
+      await renderDocument(activeScale);
+      return;
+    }
+
+    setSourceLabel("Chua chon PDF");
+    showMessage("Bam 'Mo PDF tu may' de chon file PDF tu may tinh.");
   } catch (error) {
     showMessage(`Khong the mo PDF: ${error.message}`);
   }
@@ -149,6 +215,16 @@ scaleSelect.addEventListener("change", async () => {
 
 reloadBtn.addEventListener("click", async () => {
   await renderDocument(activeScale);
+});
+
+openLocalPdfBtn.addEventListener("click", () => {
+  localPdfInput.value = "";
+  localPdfInput.click();
+});
+
+localPdfInput.addEventListener("change", async (event) => {
+  const file = event.target.files?.[0];
+  await useLocalPdfFile(file);
 });
 
 bootstrap();

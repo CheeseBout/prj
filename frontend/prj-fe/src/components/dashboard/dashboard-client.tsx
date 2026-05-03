@@ -435,7 +435,7 @@ export const DashboardClient = () => {
                 <div className="mt-6 flex items-center gap-3">
                   <Link
                     href={`/practice?tag=${encodeURIComponent(col.tag)}`}
-                    className="flex-1 text-center bg-foreground px-3 py-2 text-xs font-semibold text-background transition hover:bg-foreground/80"
+                    className="flex-1 text-center bg-accent px-3 py-2 text-xs font-semibold text-background transition hover:bg-foreground/80"
                   >
                     {col.due > 0 ? `Practice (${col.due} due)` : "Practice"}
                   </Link>

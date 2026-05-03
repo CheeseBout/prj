@@ -131,7 +131,7 @@
 .ll-translatable.ll-showing-translation {
   font-size: 0 !important;
   color: transparent !important;
-  line-height: 0 !important;
+  line-height: normal !important;
 }
 
 .ll-translatable.ll-showing-translation > *:not(.ll-translation) {

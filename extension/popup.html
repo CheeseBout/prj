@@ -19,15 +19,17 @@
     .mode-selector { display: flex; flex-direction: column; gap: 10px; }
     .mode-option { display: flex; align-items: flex-start; gap: 8px; cursor: pointer; }
     .mode-desc { font-size: 12px; color: #666; margin-top: 2px; }
-    .save-btn { margin-top: 15px; width: 100%; padding: 8px; background: #1a73e8; color: white; border: none; border-radius: 4px; cursor: pointer; transition: background 0.2s; }
+    .local-pdf-btn { margin-top: 10px; width: 100%; padding: 8px; background: #37474f; color: white; border: none; border-radius: 4px; cursor: pointer; transition: background 0.2s; }
+    .local-pdf-btn:hover { background: #263238; }
+    .save-btn { margin-top: 10px; width: 100%; padding: 8px; background: #1a73e8; color: white; border: none; border-radius: 4px; cursor: pointer; transition: background 0.2s; }
     .save-btn:hover { background: #1557b0; }
   </style>
 </head>
 <body>
-  <h3>⚙️ Cài đặt Extension</h3>
+  <h3>Cai dat Extension</h3>
 
   <div class="toggle-container">
-    <span style="font-weight: 500; color: #333; font-size: 14px;">Trạng thái hoạt động:</span>
+    <span style="font-weight: 500; color: #333; font-size: 14px;">Trang thai hoat dong:</span>
     <label class="switch">
       <input type="checkbox" id="toggleExtension" checked>
       <span class="slider round"></span>
@@ -35,7 +37,7 @@
   </div>
 
   <div class="toggle-container">
-    <span style="font-weight: 500; color: #333; font-size: 14px;">Dịch PDF (PDF.js):</span>
+    <span style="font-weight: 500; color: #333; font-size: 14px;">Dich PDF (PDF.js):</span>
     <label class="switch">
       <input type="checkbox" id="togglePdfTranslation">
       <span class="slider round"></span>
@@ -46,19 +48,21 @@
     <label class="mode-option">
       <input type="radio" name="trans_mode" value="mode_vocab" checked>
       <div>
-        <strong>Học Từ Vựng (Tooltip)</strong>
-        <div class="mode-desc">Bôi sáng từ khó và hiển thị giải thích khi click.</div>
+        <strong>Hoc Tu Vung (Tooltip)</strong>
+        <div class="mode-desc">Boi sang tu kho va hien giai thich khi click.</div>
       </div>
     </label>
     <label class="mode-option">
       <input type="radio" name="trans_mode" value="mode_inline">
       <div>
-        <strong>Dịch Chèn Dòng (Inline)</strong>
-        <div class="mode-desc">Dịch toàn bộ đoạn văn, click để xem bản gốc.</div>
+        <strong>Dich Chen Dong (Inline)</strong>
+        <div class="mode-desc">Dich toan bo doan van, click de xem ban goc.</div>
       </div>
     </label>
   </div>
-  <button id="saveBtn" class="save-btn">Lưu thiết lập</button>
+
+  <button id="openLocalPdfViewerBtn" class="local-pdf-btn">Mo PDF tu may (PDF.js)</button>
+  <button id="saveBtn" class="save-btn">Luu thiet lap</button>
 
   <script src="popup.js"></script>
 </body>

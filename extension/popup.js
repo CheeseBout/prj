@@ -2,8 +2,8 @@ document.addEventListener('DOMContentLoaded', () => {
   const saveBtn = document.getElementById('saveBtn');
   const toggleExtension = document.getElementById('toggleExtension');
   const togglePdfTranslation = document.getElementById('togglePdfTranslation');
+  const openLocalPdfViewerBtn = document.getElementById('openLocalPdfViewerBtn');
 
-  // 1. Load trạng thái đã lưu
   chrome.storage.sync.get(
     ['translationMode', 'extensionEnabled', 'pdfTranslationEnabled'],
     (result) => {
@@ -12,17 +12,14 @@ document.addEventListener('DOMContentLoaded', () => {
         if (savedRadio) savedRadio.checked = true;
       }
 
-      // Mặc định là bật nếu chưa có giá trị lưu trữ
       if (result.extensionEnabled !== undefined) {
         toggleExtension.checked = result.extensionEnabled;
       }
 
-      // Mặc định tắt chế độ PDF
       togglePdfTranslation.checked = result.pdfTranslationEnabled === true;
     },
   );
 
-  // 2. Gửi tin nhắn ngay khi gạt nút Bật/Tắt
   toggleExtension.addEventListener('change', (e) => {
     const isEnabled = e.target.checked;
     const selectedMode = document.querySelector('input[name="trans_mode"]:checked').value;
@@ -43,7 +40,10 @@ document.addEventListener('DOMContentLoaded', () => {
     chrome.storage.sync.set({ pdfTranslationEnabled: e.target.checked });
   });
 
-  // 3. Nút Lưu: Lưu cả Mode, Trạng thái extension và toggle PDF
+  openLocalPdfViewerBtn.addEventListener('click', () => {
+    chrome.tabs.create({ url: chrome.runtime.getURL('pdfjs/web/viewer.html') });
+  });
+
   saveBtn.addEventListener('click', () => {
     const selectedMode = document.querySelector('input[name="trans_mode"]:checked').value;
     const isEnabled = toggleExtension.checked;
@@ -66,7 +66,7 @@ document.addEventListener('DOMContentLoaded', () => {
           }
         });
 
-        saveBtn.innerText = 'Đã lưu thành công! ✓';
+        saveBtn.innerText = 'Da luu thanh cong!';
         saveBtn.style.backgroundColor = '#4caf50';
         setTimeout(() => window.close(), 800);
       },
