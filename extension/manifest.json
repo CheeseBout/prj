@@ -22,6 +22,7 @@
   "content_scripts": [
     {
       "matches": ["<all_urls>"],
+      "exclude_globs": ["*pdfjs/web/viewer.html*"],
       "css": ["styles.css"],
       "js": ["content.js"]
     }

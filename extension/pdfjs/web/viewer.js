@@ -11,9 +11,10 @@ const localPdfInput = document.getElementById("localPdfInput");
 const pageTemplate = document.getElementById("pageTemplate");
 
 let activePdfSource = null;
-let activeScale = Number(scaleSelect.value || 1.35);
+let activeScale = Number(scaleSelect.value || 1);
 let activeRenderEpoch = 0;
 let activeLoadingTask = null;
+let resizeDebounceTimer = null;
 
 function showMessage(message) {
   viewerRoot.innerHTML = "";
@@ -74,13 +75,20 @@ function getDocumentSource() {
   return null;
 }
 
-async function renderPage(pdfDoc, pageNumber, scale, renderEpoch) {
+function getFitWidthScale(page) {
+  const baseViewport = page.getViewport({ scale: 1 });
+  const availableWidth = Math.max(360, viewerRoot.clientWidth - 40);
+  return availableWidth / baseViewport.width;
+}
+
+async function renderPage(pdfDoc, pageNumber, scaleMultiplier, renderEpoch) {
   if (renderEpoch !== activeRenderEpoch) return;
 
   const page = await pdfDoc.getPage(pageNumber);
   if (renderEpoch !== activeRenderEpoch) return;
 
-  const viewport = page.getViewport({ scale });
+  const fitScale = getFitWidthScale(page);
+  const viewport = page.getViewport({ scale: fitScale * scaleMultiplier });
 
   const node = pageTemplate.content.firstElementChild.cloneNode(true);
   const title = node.querySelector(".page-title");
@@ -101,9 +109,16 @@ async function renderPage(pdfDoc, pageNumber, scale, renderEpoch) {
   textLayerEl.style.width = `${Math.ceil(viewport.width)}px`;
   textLayerEl.style.height = `${Math.ceil(viewport.height)}px`;
 
+  // Append vào DOM TRƯỚC khi render canvas
+  viewerRoot.appendChild(node);
+
   const context = canvas.getContext("2d", { alpha: false });
+  // Nền trắng tường minh — fix dark mode render trắng
+  context.fillStyle = "#ffffff";
+  context.fillRect(0, 0, canvas.width, canvas.height);
+
   await page.render({ canvasContext: context, viewport }).promise;
-  if (renderEpoch !== activeRenderEpoch) return;
+  if (renderEpoch !== activeRenderEpoch) { node.remove(); return; }
 
   const textContent = await page.getTextContent();
   if (renderEpoch !== activeRenderEpoch) return;
@@ -118,16 +133,18 @@ async function renderPage(pdfDoc, pageNumber, scale, renderEpoch) {
   if (renderEpoch !== activeRenderEpoch) return;
 
   cleanupEmptyTextSpans(textLayerEl);
-
-  viewerRoot.appendChild(node);
 }
 
-async function renderDocument(scale) {
+async function renderDocument(scaleMultiplier) {
   const source = getDocumentSource();
   if (!source) {
     showMessage("Chon file PDF tu may hoac mo URL PDF de bat dau.");
     return;
   }
+
+  source.cMapUrl = "https://unpkg.com/pdfjs-dist@latest/cmaps/"; 
+  source.cMapPacked = true;
+  source.standardFontDataUrl = "https://unpkg.com/pdfjs-dist@latest/standard_fonts/";
 
   activeRenderEpoch += 1;
   const renderEpoch = activeRenderEpoch;
@@ -135,9 +152,7 @@ async function renderDocument(scale) {
   if (activeLoadingTask) {
     try {
       await activeLoadingTask.destroy();
-    } catch (_error) {
-      // ignore
-    }
+    } catch (_error) {}
     activeLoadingTask = null;
   }
 
@@ -159,7 +174,7 @@ async function renderDocument(scale) {
   viewerRoot.innerHTML = "";
 
   for (let pageNumber = 1; pageNumber <= pdfDoc.numPages; pageNumber += 1) {
-    await renderPage(pdfDoc, pageNumber, scale, renderEpoch);
+    await renderPage(pdfDoc, pageNumber, scaleMultiplier, renderEpoch);
     if (renderEpoch !== activeRenderEpoch) return;
   }
 }
@@ -225,6 +240,14 @@ openLocalPdfBtn.addEventListener("click", () => {
 localPdfInput.addEventListener("change", async (event) => {
   const file = event.target.files?.[0];
   await useLocalPdfFile(file);
+});
+
+window.addEventListener("resize", () => {
+  if (!activePdfSource) return;
+  clearTimeout(resizeDebounceTimer);
+  resizeDebounceTimer = setTimeout(() => {
+    renderDocument(activeScale);
+  }, 150);
 });
 
 bootstrap();
