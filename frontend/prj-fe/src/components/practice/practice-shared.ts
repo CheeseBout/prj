@@ -1,6 +1,4 @@
-import { ProgressUpdateResponse } from "@/lib/api";
-
-/* ── SM-2 quality choices ──────────────────────────────────────── */
+/* SM-2 quality choices */
 
 export const qualityChoices: Array<{
   quality: number;
@@ -16,7 +14,7 @@ export const qualityChoices: Array<{
   { quality: 5, label: "Very easy", color: "#059669", bgHover: "rgba(5,150,105,0.15)" },
 ];
 
-/* ── Specialization config ─────────────────────────────────────── */
+/* Specialization config */
 
 export const specColors: Record<string, { bg: string; text: string; border: string }> = {
   ai_computer_science: { bg: "#eff6ff", text: "#1d4ed8", border: "#bfdbfe" },
@@ -48,7 +46,7 @@ export const getSpecColor = (spec?: string) => {
 export const getSpecDisplayName = (spec: string) =>
   specDisplayNames[spec] ?? spec.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
 
-/* ── Difficulty config ─────────────────────────────────────────── */
+/* Difficulty config */
 
 export const difficultyColorMap: Record<string, string> = {
   basic: "#16a34a",
@@ -56,15 +54,20 @@ export const difficultyColorMap: Record<string, string> = {
   advanced: "#dc2626",
 };
 
-/* ── Session result per card ───────────────────────────────────── */
+/* Session result per card */
 
 export interface CardResult {
   word: string;
   quality: number;
-  response: ProgressUpdateResponse;
+  response: {
+    status: string;
+    new_status?: string;
+    interval_days?: number;
+    ease_factor?: number;
+  };
 }
 
-/* ── Types ─────────────────────────────────────────────────────── */
+/* Types */
 
 export type PracticeMode = "flashcard" | "quiz";
 export type PracticePhase = "config" | "active" | "summary";

@@ -244,6 +244,47 @@ export interface QuizResponse {
   data: QuizQuestion[];
 }
 
+export interface TestQuestion {
+  question_id: number;
+  vocab_id: number;
+  word: string;
+  stem: string;
+  choices: string[];
+  specialization?: string;
+  difficulty?: string;
+}
+
+export interface TestStartResponse {
+  status: string;
+  data: TestQuestion[];
+}
+
+export interface TestStartPayload {
+  count?: number;
+  specialization?: string;
+  tag?: string;
+  due_only?: boolean;
+}
+
+export interface TestAnswerPayload {
+  question_id: number;
+  selected_index: number;
+  response_time_ms?: number;
+}
+
+export interface TestAnswerResponse {
+  status: string;
+  is_correct: boolean;
+  correct_index: number;
+  quality: number;
+  new_status?: string;
+  repetitions?: number;
+  interval_days?: number;
+  ease_factor?: number;
+  next_review_date?: string;
+  explanation_en?: string;
+}
+
 export interface ManualTranslatePayload {
   word: string;
   context: string;
@@ -305,6 +346,42 @@ export const getVocabList = async (
   });
 };
 
+export const getAllSavedVocab = async (params?: {
+  search?: string;
+  status?: string;
+  specialization?: string;
+  difficulty?: string;
+  tags?: string[];
+  pageSize?: number;
+}): Promise<VocabItem[]> => {
+  const pageSize = params?.pageSize ?? 200;
+  let page = 1;
+  let items: VocabItem[] = [];
+  let total = Number.POSITIVE_INFINITY;
+
+  while (items.length < total) {
+    const response = await getVocabList(
+      page,
+      pageSize,
+      params?.search,
+      params?.status,
+      params?.specialization,
+      params?.difficulty,
+      params?.tags
+    );
+
+    total = response.total ?? items.length;
+    if (!response.data.length) {
+      break;
+    }
+
+    items = [...items, ...response.data];
+    page += 1;
+  }
+
+  return items;
+};
+
 export const getPracticeSpecializations = async (): Promise<SpecializationsResponse> => {
   return requestJson<SpecializationsResponse>("/api/vocab/practice/specializations", {
     method: "GET",
@@ -354,6 +431,24 @@ export const getQuiz = async (
   }
   return requestJson<QuizResponse>(`/api/vocab/quiz?${params.toString()}`, {
     method: "GET",
+  });
+};
+
+export const startTestSession = async (
+  payload: TestStartPayload
+): Promise<TestStartResponse> => {
+  return requestJson<TestStartResponse>("/api/test/start", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+};
+
+export const submitTestAnswer = async (
+  payload: TestAnswerPayload
+): Promise<TestAnswerResponse> => {
+  return requestJson<TestAnswerResponse>("/api/test/answer", {
+    method: "POST",
+    body: JSON.stringify(payload),
   });
 };
 

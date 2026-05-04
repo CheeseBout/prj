@@ -20,11 +20,11 @@ import {
 
 interface Props {
   results: CardResult[];
-  startTime: number;
+  durationMs: number;
   onRestart: () => void;
 }
 
-export const SessionSummary = ({ results, startTime, onRestart }: Props) => {
+export const SessionSummary = ({ results, durationMs, onRestart }: Props) => {
   const avgQuality =
     results.length > 0
       ? results.reduce((sum, r) => sum + r.quality, 0) / results.length
@@ -40,7 +40,7 @@ export const SessionSummary = ({ results, startTime, onRestart }: Props) => {
     (r) => r.response.new_status === "mastered"
   ).length;
 
-  const duration = Date.now() - startTime;
+  const duration = durationMs;
 
   return (
     <motion.div
@@ -62,7 +62,7 @@ export const SessionSummary = ({ results, startTime, onRestart }: Props) => {
           Session <em className="italic">Complete!</em>
         </h2>
         <p className="mt-2 text-sm text-foreground/50">
-          You&apos;ve reviewed all due flashcards. Great work!
+          You&apos;ve finished this practice session. Great work!
         </p>
       </div>
 

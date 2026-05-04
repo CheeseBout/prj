@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState, useMemo } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { useSearchParams } from "next/navigation";
 import {
@@ -13,115 +13,158 @@ import {
 } from "lucide-react";
 
 import {
-  getPracticeList,
-  getPracticeSpecializations,
-  getQuiz,
-  getTags,
-  QuizQuestion,
+  getAllSavedVocab,
   SpecializationOption,
   TagOption,
+  TestQuestion,
   VocabItem,
+  startTestSession,
 } from "@/lib/api";
 
-import {
-  CardResult,
-  getSpecColor,
-  getSpecDisplayName,
-  PracticeMode,
-  PracticePhase,
-} from "./practice-shared";
+import { CardResult, PracticeMode, PracticePhase } from "./practice-shared";
 import { FlashcardMode } from "./flashcard-mode";
 import { QuizMode } from "./quiz-mode";
 import { SessionSummary } from "./session-summary";
 
-/* ── Component ─────────────────────────────────────────────────── */
+const DEFAULT_TEST_COUNT = 20;
+
+const normalizeText = (value?: string | null) => (value ?? "").trim().toLowerCase();
 
 export const PracticeClient = () => {
-  /* ── Phase management ───────────────────────────────────────── */
   const [phase, setPhase] = useState<PracticePhase>("config");
   const [selectedMode, setSelectedMode] = useState<PracticeMode>("flashcard");
   const [selectedSpec, setSelectedSpec] = useState("all");
-  const [quizType, setQuizType] = useState<"en_to_vi" | "vi_to_en">("en_to_vi");
 
   const searchParams = useSearchParams();
   const initialTag = searchParams.get("tag");
 
-  /* ── Config data ────────────────────────────────────────────── */
+  const [allSavedWords, setAllSavedWords] = useState<VocabItem[]>([]);
   const [specOptions, setSpecOptions] = useState<SpecializationOption[]>([]);
   const [tagOptions, setTagOptions] = useState<TagOption[]>([]);
-  const [totalDue, setTotalDue] = useState(0);
+  const [totalSaved, setTotalSaved] = useState(0);
   const [configLoading, setConfigLoading] = useState(true);
 
-  /* ── Source management ──────────────────────────────────────── */
-  const [source, setSource] = useState<"review" | "collection">(initialTag ? "collection" : "review");
+  const [source, setSource] = useState<"all" | "collection">(
+    initialTag ? "collection" : "all"
+  );
   const [selectedTag, setSelectedTag] = useState<string>(initialTag || "all");
 
-  /* ── Active data ────────────────────────────────────────────── */
   const [practiceList, setPracticeList] = useState<VocabItem[]>([]);
-  const [quizQuestions, setQuizQuestions] = useState<QuizQuestion[]>([]);
+  const [quizQuestions, setQuizQuestions] = useState<TestQuestion[]>([]);
   const [activeLoading, setActiveLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  /* ── Session tracking ───────────────────────────────────────── */
   const [sessionResults, setSessionResults] = useState<CardResult[]>([]);
-  const sessionStartTime = useRef(Date.now());
+  const [sessionStartedAt, setSessionStartedAt] = useState(0);
+  const [sessionDurationMs, setSessionDurationMs] = useState(0);
 
-  /* ── Load config ────────────────────────────────────────────── */
   const loadConfig = useCallback(async () => {
     setConfigLoading(true);
     try {
-      const [specRes, tagsRes] = await Promise.all([
-        getPracticeSpecializations().catch(() => ({ data: [], total_due: 0 })),
-        getTags().catch(() => ({ data: [] }))
-      ]);
-      setSpecOptions(specRes.data ?? []);
-      setTotalDue(specRes.total_due ?? 0);
-      setTagOptions(tagsRes.data ?? []);
+      const words = await getAllSavedVocab();
+      setAllSavedWords(words);
+      setTotalSaved(words.length);
+
+      const specMap = new Map<string, number>();
+      const tagMap = new Map<string, number>();
+
+      words.forEach((item) => {
+        const spec = item.specialization?.trim();
+        if (spec) {
+          specMap.set(spec, (specMap.get(spec) ?? 0) + 1);
+        }
+
+        item.tags?.forEach((tag) => {
+          const normalizedTag = tag.trim().toLowerCase();
+          if (!normalizedTag) return;
+          tagMap.set(normalizedTag, (tagMap.get(normalizedTag) ?? 0) + 1);
+        });
+      });
+
+      const specs: SpecializationOption[] = Array.from(specMap.entries())
+        .map(([specialization, count]) => ({
+          specialization,
+          due_count: count,
+        }))
+        .sort((a, b) => b.due_count - a.due_count);
+
+      const tags: TagOption[] = Array.from(tagMap.entries())
+        .map(([tag, count]) => ({
+          tag,
+          word_count: count,
+          due_count: count,
+        }))
+        .sort((a, b) => b.word_count - a.word_count);
+
+      setSpecOptions(specs);
+      setTagOptions(tags);
+    } catch {
+      setAllSavedWords([]);
+      setSpecOptions([]);
+      setTagOptions([]);
+      setTotalSaved(0);
     } finally {
       setConfigLoading(false);
     }
   }, []);
 
   useEffect(() => {
-    void loadConfig();
+    const timer = setTimeout(() => {
+      void loadConfig();
+    }, 0);
+    return () => clearTimeout(timer);
   }, [loadConfig]);
 
-  /* ── Start session ──────────────────────────────────────────── */
+  const filteredWords = useMemo(() => {
+    let output = [...allSavedWords];
+
+    if (source === "all" && selectedSpec !== "all") {
+      output = output.filter((item) => item.specialization === selectedSpec);
+    }
+
+    if (source === "collection" && selectedTag !== "all") {
+      output = output.filter((item) =>
+        item.tags?.some((tag) => normalizeText(tag) === normalizeText(selectedTag))
+      );
+    }
+
+    return output;
+  }, [allSavedWords, source, selectedSpec, selectedTag]);
+
+  const availableForSelected = filteredWords.length;
+
   const startSession = async () => {
     setActiveLoading(true);
     setError(null);
-    sessionStartTime.current = Date.now();
+    setSessionStartedAt(Date.now());
+    setSessionDurationMs(0);
     setSessionResults([]);
 
     try {
+      if (!filteredWords.length) {
+        setError("No saved vocabulary found for the selected filters.");
+        return;
+      }
+
       if (selectedMode === "flashcard") {
-        const res = await getPracticeList(
-          selectedSpec !== "all" ? selectedSpec : undefined,
-          source === "collection" && selectedTag !== "all" ? [selectedTag] : undefined
-        );
-        if (!res.data?.length) {
-          setError("No words due for review with the selected filters.");
-          setActiveLoading(false);
-          return;
-        }
-        setPracticeList(res.data);
+        setPracticeList(filteredWords);
       } else {
-        const res = await getQuiz(
-          selectedSpec !== "all" ? selectedSpec : undefined,
-          20,
-          quizType,
-          source === "collection" && selectedTag !== "all" ? [selectedTag] : undefined
-        );
+        const res = await startTestSession({
+          count: DEFAULT_TEST_COUNT,
+          specialization: source === "all" && selectedSpec !== "all" ? selectedSpec : undefined,
+          tag: source === "collection" && selectedTag !== "all" ? selectedTag : undefined,
+          due_only: true,
+        });
         if (!res.data?.length) {
-          setError("Not enough words to generate a quiz. You need at least 4 words with translations.");
-          setActiveLoading(false);
+          setError("No questions available for current filters.");
           return;
         }
         setQuizQuestions(res.data);
       }
+
       setPhase("active");
-    } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : "Failed to load session.");
+    } catch (unknownError: unknown) {
+      setError(unknownError instanceof Error ? unknownError.message : "Failed to load session.");
     } finally {
       setActiveLoading(false);
     }
@@ -129,6 +172,7 @@ export const PracticeClient = () => {
 
   const handleFinish = (results: CardResult[]) => {
     setSessionResults(results);
+    setSessionDurationMs(sessionStartedAt > 0 ? Math.max(0, Date.now() - sessionStartedAt) : 0);
     setPhase("summary");
   };
 
@@ -140,26 +184,13 @@ export const PracticeClient = () => {
     void loadConfig();
   };
 
-  /* ── Derived values ─────────────────────────────────────────── */
-  const dueForSelected = useMemo(() => {
-    if (source === "collection" && selectedTag !== "all") {
-      return tagOptions.find(t => t.tag === selectedTag)?.due_count ?? 0;
-    }
-    if (selectedSpec !== "all") {
-      return specOptions.find(s => s.specialization === selectedSpec)?.due_count ?? 0;
-    }
-    return totalDue;
-  }, [source, selectedTag, selectedSpec, tagOptions, specOptions, totalDue]);
-
-  /* ── Render ─────────────────────────────────────────────────── */
   return (
     <div className="flex h-[calc(100vh-4rem)] flex-col">
-      {/* ── Header ──────────────────────────────────────────────── */}
       <header className="flex items-center justify-between border-b border-foreground/10 pb-6">
         <div>
           <p className="editorial-meta">Practice room</p>
           <h1 className="mt-2 font-serif text-3xl">
-            SM-2 <em className="italic">Flashcards.</em>
+            Practice & <em className="italic">Test.</em>
           </h1>
         </div>
         {phase !== "config" && (
@@ -174,10 +205,8 @@ export const PracticeClient = () => {
         )}
       </header>
 
-      {/* ── Content ─────────────────────────────────────────────── */}
       <div className="flex flex-1 items-center justify-center bg-foreground/[0.02]">
         <AnimatePresence mode="wait">
-          {/* ── CONFIG PHASE ──────────────────────────────────── */}
           {phase === "config" && (
             <motion.div
               key="config"
@@ -191,24 +220,23 @@ export const PracticeClient = () => {
                 <p className="editorial-meta animate-pulse text-center">Loading practice data...</p>
               ) : (
                 <div className="space-y-6">
-                  {/* Source picker */}
                   <div className="border border-foreground/10 bg-white p-8">
-                    <div className="flex items-center gap-2 mb-5">
+                    <div className="mb-5 flex items-center gap-2">
                       <Tag size={16} className="text-accent" />
                       <p className="editorial-meta text-foreground">Choose Source</p>
                     </div>
 
-                    <div className="grid grid-cols-2 gap-3 mb-6">
+                    <div className="mb-6 grid grid-cols-2 gap-3">
                       <button
                         type="button"
-                        onClick={() => setSource("review")}
+                        onClick={() => setSource("all")}
                         className={`flex flex-col items-center gap-2 border p-4 transition ${
-                          source === "review"
+                          source === "all"
                             ? "border-accent bg-accent/5 text-accent"
                             : "border-foreground/10 hover:bg-foreground/[0.03]"
                         }`}
                       >
-                        <span className="text-sm font-bold">Words to Review</span>
+                        <span className="text-sm font-bold">All Saved Words</span>
                       </button>
                       <button
                         type="button"
@@ -224,49 +252,50 @@ export const PracticeClient = () => {
                     </div>
 
                     {source === "collection" && (
-                      <motion.div
-                        initial={{ opacity: 0, height: 0 }}
-                        animate={{ opacity: 1, height: "auto" }}
-                      >
-                        <label className="mb-2 block text-xs font-semibold uppercase tracking-wider text-foreground/50">Select Tag</label>
+                      <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }}>
+                        <label className="mb-2 block text-xs font-semibold uppercase tracking-wider text-foreground/50">
+                          Select Tag
+                        </label>
                         <select
                           value={selectedTag}
-                          onChange={(e) => setSelectedTag(e.target.value)}
+                          onChange={(event) => setSelectedTag(event.target.value)}
                           className="w-full border border-foreground/15 bg-transparent px-3 py-2 text-sm outline-none transition focus:border-accent"
                         >
-                          <option value="all">All Tags ({totalDue} due)</option>
-                          {tagOptions.map(t => (
-                            <option key={t.tag} value={t.tag}>{t.tag} ({t.due_count} due)</option>
+                          <option value="all">All Tags ({totalSaved} words)</option>
+                          {tagOptions.map((tag) => (
+                            <option key={tag.tag} value={tag.tag}>
+                              {tag.tag} ({tag.word_count} words)
+                            </option>
                           ))}
                         </select>
                       </motion.div>
                     )}
 
-                    {source === "review" && (
-                      <motion.div
-                        initial={{ opacity: 0, height: 0 }}
-                        animate={{ opacity: 1, height: "auto" }}
-                      >
-                        <label className="mb-2 block text-xs font-semibold uppercase tracking-wider text-foreground/50">Filter by Specialization (Optional)</label>
+                    {source === "all" && (
+                      <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }}>
+                        <label className="mb-2 block text-xs font-semibold uppercase tracking-wider text-foreground/50">
+                          Filter by Specialization (Optional)
+                        </label>
                         <select
                           value={selectedSpec}
-                          onChange={(e) => setSelectedSpec(e.target.value)}
+                          onChange={(event) => setSelectedSpec(event.target.value)}
                           className="w-full border border-foreground/15 bg-transparent px-3 py-2 text-sm outline-none transition focus:border-accent"
                         >
-                          <option value="all">All Fields ({totalDue} due)</option>
-                          {specOptions.map(s => (
-                            <option key={s.specialization} value={s.specialization}>{s.specialization} ({s.due_count} due)</option>
+                          <option value="all">All Fields ({totalSaved} words)</option>
+                          {specOptions.map((spec) => (
+                            <option key={spec.specialization} value={spec.specialization}>
+                              {spec.specialization} ({spec.due_count} words)
+                            </option>
                           ))}
                         </select>
                       </motion.div>
                     )}
                   </div>
 
-                  {/* Mode picker */}
                   <div className="border border-foreground/10 bg-white p-8">
-                    <div className="flex items-center gap-2 mb-5">
+                    <div className="mb-5 flex items-center gap-2">
                       <Layers size={16} className="text-accent" />
-                      <p className="editorial-meta text-foreground">Choose practice mode</p>
+                      <p className="editorial-meta text-foreground">Choose mode</p>
                     </div>
 
                     <div className="grid grid-cols-2 gap-3">
@@ -279,10 +308,13 @@ export const PracticeClient = () => {
                             : "border-foreground/10 hover:bg-foreground/[0.03]"
                         }`}
                       >
-                        <GraduationCap size={28} className={selectedMode === "flashcard" ? "text-accent" : "text-foreground/30"} />
+                        <GraduationCap
+                          size={28}
+                          className={selectedMode === "flashcard" ? "text-accent" : "text-foreground/30"}
+                        />
                         <div className="text-center">
                           <p className="text-sm font-bold">Flashcard</p>
-                          <p className="text-xs text-foreground/40 mt-1">Flip & self-assess</p>
+                          <p className="mt-1 text-xs text-foreground/40">Browse saved vocabulary</p>
                         </div>
                       </button>
 
@@ -295,67 +327,48 @@ export const PracticeClient = () => {
                             : "border-foreground/10 hover:bg-foreground/[0.03]"
                         }`}
                       >
-                        <ListChecks size={28} className={selectedMode === "quiz" ? "text-accent" : "text-foreground/30"} />
+                        <ListChecks
+                          size={28}
+                          className={selectedMode === "quiz" ? "text-accent" : "text-foreground/30"}
+                        />
                         <div className="text-center">
-                          <p className="text-sm font-bold">Quiz</p>
-                          <p className="text-xs text-foreground/40 mt-1">Multiple choice</p>
+                          <p className="text-sm font-bold">Test</p>
+                          <p className="mt-1 text-xs text-foreground/40">Multiple choice with SM-2 updates</p>
                         </div>
                       </button>
                     </div>
 
-                    {/* Quiz sub-options */}
                     {selectedMode === "quiz" && (
                       <motion.div
-                        className="mt-4 flex gap-2"
+                        className="mt-4 rounded border border-amber-300 bg-amber-50 px-4 py-3 text-xs text-amber-700"
                         initial={{ opacity: 0, height: 0 }}
                         animate={{ opacity: 1, height: "auto" }}
                       >
-                        <button
-                          type="button"
-                          onClick={() => setQuizType("en_to_vi")}
-                          className={`flex-1 border px-4 py-2.5 text-xs font-semibold transition ${
-                            quizType === "en_to_vi"
-                              ? "border-accent bg-accent/5 text-accent"
-                              : "border-foreground/10 text-foreground/50 hover:bg-foreground/[0.03]"
-                          }`}
-                        >
-                          EN → VI
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setQuizType("vi_to_en")}
-                          className={`flex-1 border px-4 py-2.5 text-xs font-semibold transition ${
-                            quizType === "vi_to_en"
-                              ? "border-accent bg-accent/5 text-accent"
-                              : "border-foreground/10 text-foreground/50 hover:bg-foreground/[0.03]"
-                          }`}
-                        >
-                          VI → EN
-                        </button>
+                        Questions are generated in English and reused from the backend question bank.
                       </motion.div>
                     )}
                   </div>
 
-                  {/* Error */}
                   {error && (
-                    <div className="border-l-2 border-red-400 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>
+                    <div className="border-l-2 border-red-400 bg-red-50 px-4 py-3 text-sm text-red-700">
+                      {error}
+                    </div>
                   )}
 
-                  {/* Start button */}
                   <button
                     type="button"
-                    disabled={activeLoading || dueForSelected === 0}
+                    disabled={activeLoading || availableForSelected === 0}
                     onClick={() => void startSession()}
-                    className="group flex w-full items-center justify-center gap-3 bg-foreground px-6 py-4 text-sm font-semibold text-background transition hover:bg-foreground/85 disabled:opacity-40 disabled:cursor-not-allowed"
+                    className="group flex w-full items-center justify-center gap-3 bg-foreground px-6 py-4 text-sm font-semibold text-background transition hover:bg-foreground/85 disabled:cursor-not-allowed disabled:opacity-40"
                   >
                     {activeLoading ? (
                       <span className="animate-pulse">Loading session...</span>
-                    ) : dueForSelected === 0 ? (
-                      <span>No words due for review</span>
+                    ) : availableForSelected === 0 ? (
+                      <span>No saved words for current filters</span>
                     ) : (
                       <>
                         <BrainCircuit size={18} />
-                        Start {selectedMode === "flashcard" ? "Flashcard" : "Quiz"} — {dueForSelected} words due
+                        Start {selectedMode === "flashcard" ? "Flashcard" : "Test"} - {availableForSelected} words
                       </>
                     )}
                   </button>
@@ -364,41 +377,33 @@ export const PracticeClient = () => {
             </motion.div>
           )}
 
-          {/* ── ACTIVE PHASE ─────────────────────────────────── */}
           {phase === "active" && (
             <motion.div
               key="active"
-              className="w-full flex justify-center"
+              className="flex w-full justify-center"
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
             >
               {selectedMode === "flashcard" ? (
-                <FlashcardMode
-                  practiceList={practiceList}
-                  onFinish={handleFinish}
-                />
+                <FlashcardMode practiceList={practiceList} onFinish={handleFinish} />
               ) : (
-                <QuizMode
-                  questions={quizQuestions}
-                  onFinish={handleFinish}
-                />
+                <QuizMode questions={quizQuestions} onFinish={handleFinish} />
               )}
             </motion.div>
           )}
 
-          {/* ── SUMMARY PHASE ────────────────────────────────── */}
           {phase === "summary" && (
             <motion.div
               key="summary"
-              className="w-full flex justify-center"
+              className="flex w-full justify-center"
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
             >
               <SessionSummary
                 results={sessionResults}
-                startTime={sessionStartTime.current}
+                durationMs={sessionDurationMs}
                 onRestart={handleRestart}
               />
             </motion.div>

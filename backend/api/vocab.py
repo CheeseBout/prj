@@ -100,6 +100,8 @@ async def get_vocab_list(
         UserVocabProgress.difficulty,
         UserVocabProgress.context,
         UserVocabProgress.translation,
+        UserVocabProgress.en_explanation,
+        UserVocabProgress.vi_explanation,
         UserVocabProgress.next_review_date
     ).join(
         Vocabulary, UserVocabProgress.vocab_id == Vocabulary.id
@@ -164,6 +166,8 @@ async def get_vocab_list(
             "difficulty": row.difficulty,
             "context": row.context,
             "translation": row.translation,
+            "en_explanation": row.en_explanation,
+            "vi_explanation": row.vi_explanation,
             "next_review_date": row.next_review_date.isoformat() if row.next_review_date else None,
             "tags": tags_map.get(row.word, [])
         })

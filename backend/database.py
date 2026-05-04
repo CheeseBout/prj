@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Float, DateTime, ForeignKey, Boolean, Date, UniqueConstraint
+from sqlalchemy import Column, Integer, String, Float, DateTime, ForeignKey, Boolean, Date, UniqueConstraint, Text
 from sqlalchemy.orm import declarative_base
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from sqlalchemy.orm import sessionmaker
@@ -82,6 +82,44 @@ class CollectionWord(Base):
     collection_id = Column(Integer, ForeignKey("collections.id"), primary_key=True)
     user_id = Column(String(36), ForeignKey("users.user_id"), primary_key=True)
     vocab_id = Column(Integer, ForeignKey("vocabularies.id"), primary_key=True)
+
+class QuestionBank(Base):
+    __tablename__ = "question_bank"
+    id = Column(Integer, primary_key=True, index=True)
+    vocab_id = Column(Integer, ForeignKey("vocabularies.id"), nullable=False, index=True)
+    question_type = Column(String(50), nullable=False, default="meaning_mcq_en", index=True)
+    stem = Column(String(1000), nullable=False)
+    choices_json = Column(Text, nullable=False)
+    correct_index = Column(Integer, nullable=False)
+    explanation_en = Column(String(2000), nullable=True)
+    specialization = Column(String(100), nullable=True)
+    difficulty = Column(String(50), nullable=True)
+    prompt_version = Column(String(100), nullable=False, default="mcq_en_v1", index=True)
+    content_fingerprint = Column(String(64), nullable=False, index=True)
+    language = Column(String(20), nullable=False, default="en")
+    is_active = Column(Boolean, nullable=False, default=True, index=True)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow)
+    __table_args__ = (
+        UniqueConstraint(
+            "vocab_id",
+            "question_type",
+            "content_fingerprint",
+            "prompt_version",
+            name="uq_question_bank_vocab_type_fingerprint_prompt",
+        ),
+    )
+
+class UserQuestionAttempt(Base):
+    __tablename__ = "user_question_attempt"
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(String(36), ForeignKey("users.user_id"), nullable=False, index=True)
+    question_id = Column(Integer, ForeignKey("question_bank.id"), nullable=False, index=True)
+    selected_index = Column(Integer, nullable=True)
+    is_correct = Column(Boolean, nullable=False)
+    quality_score = Column(Integer, nullable=False)
+    response_time_ms = Column(Integer, nullable=True)
+    answered_at = Column(DateTime, default=datetime.datetime.utcnow, index=True)
 
 async def init_db():
     async with engine.begin() as conn:

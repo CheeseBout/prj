@@ -6,7 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from database import init_db
 from utils.logger import request_logging_middleware, append_json_log
 from utils.cache import redis_client, cache_state
-from api import scan, progress, auth, vocab, tags, collections
+from api import scan, progress, auth, vocab, tags, collections, test
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -71,6 +71,7 @@ app.include_router(progress.router, prefix="/api", tags=["Progress & Translation
 app.include_router(vocab.router, prefix="/api/vocab", tags=["Vocab Management"])
 app.include_router(tags.router, prefix="/api/tags", tags=["Tags"])
 app.include_router(collections.router, prefix="/api/collections", tags=["Collections"])
+app.include_router(test.router, prefix="/api/test", tags=["Test"])
 
 if __name__ == "__main__":
     import uvicorn
